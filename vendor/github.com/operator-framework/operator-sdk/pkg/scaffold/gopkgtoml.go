@@ -96,18 +96,14 @@ required = [
   version = "=v0.26.0"
 
 [[override]]
-  name = "github.com/census-instrumentation/opencensus-proto"
-  version = "=v0.1.0"
-
-[[override]]
   name = "sigs.k8s.io/controller-runtime"
   version = "=v0.1.10"
 
 [[constraint]]
   name = "github.com/operator-framework/operator-sdk"
   # The version rule is used for a specific release and the master branch for in between releases.
-  branch = "master" #osdk_branch_annotation
-  # version = "=v0.6.0" #osdk_version_annotation
+  # branch = "master" #osdk_branch_annotation
+  version = "=v0.6.0" #osdk_version_annotation
 
 [prune]
   go-tests = true
