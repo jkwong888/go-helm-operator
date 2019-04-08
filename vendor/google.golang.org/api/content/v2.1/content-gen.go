@@ -1,4 +1,4 @@
-// Copyright 2019 Google Inc. All rights reserved.
+// Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -6,13 +6,35 @@
 
 // Package content provides access to the Content API for Shopping.
 //
-// See https://developers.google.com/shopping-content
+// For product documentation, see: https://developers.google.com/shopping-content
+//
+// Creating a client
 //
 // Usage example:
 //
 //   import "google.golang.org/api/content/v2.1"
 //   ...
-//   contentService, err := content.New(oauthHttpClient)
+//   ctx := context.Background()
+//   contentService, err := content.NewService(ctx)
+//
+// In this example, Google Application Default Credentials are used for authentication.
+//
+// For information on how to create and obtain Application Default Credentials, see https://developers.google.com/identity/protocols/application-default-credentials.
+//
+// Other authentication options
+//
+// To use an API key for authentication (note: some APIs do not support API keys), use option.WithAPIKey:
+//
+//   contentService, err := content.NewService(ctx, option.WithAPIKey("AIza..."))
+//
+// To use an OAuth token (e.g., a user token obtained via a three-legged OAuth flow), use option.WithTokenSource:
+//
+//   config := &oauth2.Config{...}
+//   // ...
+//   token, err := config.Exchange(ctx, ...)
+//   contentService, err := content.NewService(ctx, option.WithTokenSource(config.TokenSource(ctx, token)))
+//
+// See https://godoc.org/google.golang.org/api/option/ for details on options.
 package content // import "google.golang.org/api/content/v2.1"
 
 import (
@@ -29,6 +51,8 @@ import (
 
 	gensupport "google.golang.org/api/gensupport"
 	googleapi "google.golang.org/api/googleapi"
+	option "google.golang.org/api/option"
+	htransport "google.golang.org/api/transport/http"
 )
 
 // Always reference these packages, just in case the auto-generated code
@@ -56,6 +80,32 @@ const (
 	ContentScope = "https://www.googleapis.com/auth/content"
 )
 
+// NewService creates a new APIService.
+func NewService(ctx context.Context, opts ...option.ClientOption) (*APIService, error) {
+	scopesOption := option.WithScopes(
+		"https://www.googleapis.com/auth/content",
+	)
+	// NOTE: prepend, so we don't override user-specified scopes.
+	opts = append([]option.ClientOption{scopesOption}, opts...)
+	client, endpoint, err := htransport.NewClient(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+	s, err := New(client)
+	if err != nil {
+		return nil, err
+	}
+	if endpoint != "" {
+		s.BasePath = endpoint
+	}
+	return s, nil
+}
+
+// New creates a new APIService. It uses the provided http.Client for requests.
+//
+// Deprecated: please use NewService instead.
+// To provide a custom HTTP client, use option.WithHTTPClient.
+// If you are using google.golang.org/api/googleapis/transport.APIKey, use option.WithAPIKey with NewService instead.
 func New(client *http.Client) (*APIService, error) {
 	if client == nil {
 		return nil, errors.New("client is nil")
@@ -3849,10 +3899,6 @@ type Order struct {
 	// BillingAddress: The billing address.
 	BillingAddress *OrderAddress `json:"billingAddress,omitempty"`
 
-	// ChannelType: The channel type of the order: "purchaseOnGoogle" or
-	// "googleExpress".
-	ChannelType string `json:"channelType,omitempty"`
-
 	// Customer: The details of the customer who placed the order.
 	Customer *OrderCustomer `json:"customer,omitempty"`
 
@@ -4081,7 +4127,7 @@ type OrderCustomerMarketingRightsInfo struct {
 	// MarketingEmailAddress: Email address that can be used for marketing
 	// purposes. The field may be empty even if explicitMarketingPreference
 	// is 'granted'. This happens when retrieving an old order from the
-	// customer who deleted his account.
+	// customer who deleted their account.
 	MarketingEmailAddress string `json:"marketingEmailAddress,omitempty"`
 
 	// ForceSendFields is a list of field names (e.g.
@@ -4217,9 +4263,6 @@ func (s *OrderLineItem) MarshalJSON() ([]byte, error) {
 type OrderLineItemProduct struct {
 	// Brand: Brand of the item.
 	Brand string `json:"brand,omitempty"`
-
-	// Channel: The item's channel (online or local).
-	Channel string `json:"channel,omitempty"`
 
 	// Condition: Condition or state of the item.
 	Condition string `json:"condition,omitempty"`
@@ -4871,7 +4914,9 @@ type OrderinvoicesCreateChargeInvoiceRequest struct {
 	// operations for a given order.
 	OperationId string `json:"operationId,omitempty"`
 
-	// ShipmentGroupId: [required] ID of the shipment group.
+	// ShipmentGroupId: [required] ID of the shipment group. It is assigned
+	// by the merchant in the shipLineItems method and is used to group
+	// multiple line items that have the same kind of shipping charges.
 	ShipmentGroupId string `json:"shipmentGroupId,omitempty"`
 
 	// ForceSendFields is a list of field names (e.g. "InvoiceId") to
@@ -6221,6 +6266,9 @@ func (s *OrdersShipLineItemsResponse) MarshalJSON() ([]byte, error) {
 type OrdersUpdateLineItemShippingDetailsRequest struct {
 	// DeliverByDate: Updated delivery by date, in ISO 8601 format. If not
 	// specified only ship by date is updated.
+	//
+	// Provided date should be within 1 year timeframe and can not be a date
+	// in the past.
 	DeliverByDate string `json:"deliverByDate,omitempty"`
 
 	// LineItemId: The ID of the line item to set metadata. Either
@@ -6238,6 +6286,9 @@ type OrdersUpdateLineItemShippingDetailsRequest struct {
 
 	// ShipByDate: Updated ship by date, in ISO 8601 format. If not
 	// specified only deliver by date is updated.
+	//
+	// Provided date should be within 1 year timeframe and can not be a date
+	// in the past.
 	ShipByDate string `json:"shipByDate,omitempty"`
 
 	// ForceSendFields is a list of field names (e.g. "DeliverByDate") to
@@ -7679,7 +7730,7 @@ func (s *ProductShippingWeight) UnmarshalJSON(data []byte) error {
 }
 
 // ProductStatus: The status of a product, i.e., information about a
-// product computed asynchronously by the data quality analysis.
+// product computed asynchronously.
 type ProductStatus struct {
 	// CreationDate: Date on which the item has been created, in ISO 8601
 	// format.
@@ -8730,7 +8781,9 @@ type ShipmentInvoice struct {
 	// LineItemInvoices: [required] Invoice details per line item.
 	LineItemInvoices []*ShipmentInvoiceLineItemInvoice `json:"lineItemInvoices,omitempty"`
 
-	// ShipmentGroupId: [required] ID of the shipment group.
+	// ShipmentGroupId: [required] ID of the shipment group. It is assigned
+	// by the merchant in the shipLineItems method and is used to group
+	// multiple line items that have the same kind of shipping charges.
 	ShipmentGroupId string `json:"shipmentGroupId,omitempty"`
 
 	// ForceSendFields is a list of field names (e.g. "InvoiceSummary") to
@@ -8766,8 +8819,11 @@ type ShipmentInvoiceLineItemInvoice struct {
 	// products service. Either lineItemId or productId must be set.
 	ProductId string `json:"productId,omitempty"`
 
-	// ShipmentUnitIds: [required] Unit IDs to define specific units within
-	// the line item.
+	// ShipmentUnitIds: [required] The shipment unit ID is assigned by the
+	// merchant and defines individual quantities within a line item. The
+	// same ID can be assigned to units that are the same while units that
+	// differ must be assigned a different ID (for example: free or
+	// promotional units).
 	ShipmentUnitIds []string `json:"shipmentUnitIds,omitempty"`
 
 	// UnitInvoice: [required] Invoice details for a single unit.
@@ -9260,9 +9316,6 @@ func (s *TestOrderLineItem) MarshalJSON() ([]byte, error) {
 type TestOrderLineItemProduct struct {
 	// Brand: Brand of the item.
 	Brand string `json:"brand,omitempty"`
-
-	// Channel: The item's channel.
-	Channel string `json:"channel,omitempty"`
 
 	// Condition: Condition or state of the item.
 	Condition string `json:"condition,omitempty"`
@@ -11043,8 +11096,8 @@ type AccountstatusesGetCall struct {
 	header_      http.Header
 }
 
-// Get: Retrieves the status of a Merchant Center account. Multi-client
-// accounts can only call this method for sub-accounts.
+// Get: Retrieves the status of a Merchant Center account. No
+// itemLevelIssues are returned for multi-client accounts.
 func (r *AccountstatusesService) Get(merchantId uint64, accountId uint64) *AccountstatusesGetCall {
 	c := &AccountstatusesGetCall{s: r.s, urlParams_: make(gensupport.URLParams)}
 	c.merchantId = merchantId
@@ -11159,7 +11212,7 @@ func (c *AccountstatusesGetCall) Do(opts ...googleapi.CallOption) (*AccountStatu
 	}
 	return ret, nil
 	// {
-	//   "description": "Retrieves the status of a Merchant Center account. Multi-client accounts can only call this method for sub-accounts.",
+	//   "description": "Retrieves the status of a Merchant Center account. No itemLevelIssues are returned for multi-client accounts.",
 	//   "httpMethod": "GET",
 	//   "id": "content.accountstatuses.get",
 	//   "parameterOrder": [
@@ -12026,7 +12079,8 @@ type DatafeedsCustombatchCall struct {
 	header_                     http.Header
 }
 
-// Custombatch:
+// Custombatch: Deletes, fetches, gets, inserts and updates multiple
+// datafeeds in a single request.
 func (r *DatafeedsService) Custombatch(datafeedscustombatchrequest *DatafeedsCustomBatchRequest) *DatafeedsCustombatchCall {
 	c := &DatafeedsCustombatchCall{s: r.s, urlParams_: make(gensupport.URLParams)}
 	c.datafeedscustombatchrequest = datafeedscustombatchrequest
@@ -12120,6 +12174,7 @@ func (c *DatafeedsCustombatchCall) Do(opts ...googleapi.CallOption) (*DatafeedsC
 	}
 	return ret, nil
 	// {
+	//   "description": "Deletes, fetches, gets, inserts and updates multiple datafeeds in a single request.",
 	//   "httpMethod": "POST",
 	//   "id": "content.datafeeds.custombatch",
 	//   "path": "datafeeds/batch",
@@ -13030,7 +13085,8 @@ type DatafeedstatusesCustombatchCall struct {
 	header_                            http.Header
 }
 
-// Custombatch:
+// Custombatch: Gets multiple Merchant Center datafeed statuses in a
+// single request.
 func (r *DatafeedstatusesService) Custombatch(datafeedstatusescustombatchrequest *DatafeedstatusesCustomBatchRequest) *DatafeedstatusesCustombatchCall {
 	c := &DatafeedstatusesCustombatchCall{s: r.s, urlParams_: make(gensupport.URLParams)}
 	c.datafeedstatusescustombatchrequest = datafeedstatusescustombatchrequest
@@ -13125,6 +13181,7 @@ func (c *DatafeedstatusesCustombatchCall) Do(opts ...googleapi.CallOption) (*Dat
 	}
 	return ret, nil
 	// {
+	//   "description": "Gets multiple Merchant Center datafeed statuses in a single request.",
 	//   "httpMethod": "POST",
 	//   "id": "content.datafeedstatuses.custombatch",
 	//   "path": "datafeedstatuses/batch",
@@ -17706,6 +17763,13 @@ type OrdersInstorerefundlineitemCall struct {
 // Instorerefundlineitem: Notifies that item return and refund was
 // handled directly by merchant outside of Google payments processing
 // (e.g. cash refund done in store).
+// Note: We recommend calling the returnrefundlineitem method to refund
+// in-store returns. We will issue the refund directly to the customer.
+// This helps to prevent possible differences arising between merchant
+// and Google transaction records. We also recommend having the point of
+// sale system communicate with Google to ensure that customers do not
+// receive a double refund by first refunding via Google then via an
+// in-store return.
 func (r *OrdersService) Instorerefundlineitem(merchantId uint64, orderId string, ordersinstorerefundlineitemrequest *OrdersInStoreRefundLineItemRequest) *OrdersInstorerefundlineitemCall {
 	c := &OrdersInstorerefundlineitemCall{s: r.s, urlParams_: make(gensupport.URLParams)}
 	c.merchantId = merchantId
@@ -17806,7 +17870,7 @@ func (c *OrdersInstorerefundlineitemCall) Do(opts ...googleapi.CallOption) (*Ord
 	}
 	return ret, nil
 	// {
-	//   "description": "Notifies that item return and refund was handled directly by merchant outside of Google payments processing (e.g. cash refund done in store).",
+	//   "description": "Notifies that item return and refund was handled directly by merchant outside of Google payments processing (e.g. cash refund done in store).\nNote: We recommend calling the returnrefundlineitem method to refund in-store returns. We will issue the refund directly to the customer. This helps to prevent possible differences arising between merchant and Google transaction records. We also recommend having the point of sale system communicate with Google to ensure that customers do not receive a double refund by first refunding via Google then via an in-store return.",
 	//   "httpMethod": "POST",
 	//   "id": "content.orders.instorerefundlineitem",
 	//   "parameterOrder": [

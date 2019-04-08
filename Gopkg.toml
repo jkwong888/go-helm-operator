@@ -14,7 +14,8 @@ required = [
 [[override]]
   name = "k8s.io/code-generator"
   # revision for tag "kubernetes-1.13.1"
-  revision = "c2090bec4d9b1fb25de3812f868accc2bc9ecbae"
+  #revision = "c2090bec4d9b1fb25de3812f868accc2bc9ecbae"
+  version = "kubernetes-1.13.1"
 
 [[override]]
   name = "k8s.io/kube-openapi"
@@ -63,10 +64,6 @@ required = [
   version = "=v0.26.0"
 
 [[override]]
-  name = "github.com/census-instrumentation/opencensus-proto"
-  version = "=v0.1.0"
-
-[[override]]
   name = "sigs.k8s.io/controller-runtime"
   version = "=v0.1.10"
 
@@ -94,6 +91,22 @@ required = [
 [[override]]
   name = "github.com/docker/docker"
   revision = "a9fbbdc8dd8794b20af358382ab780559bca589d"
+
+[[constraint]]
+  name = "github.com/sergi/go-diff"
+  version = "1.0.0"
+
+[[constraint]]
+  name = "gopkg.in/yaml.v2"
+  version = "2.2.2"
+
+[[constraint]]
+  name = "github.com/fatih/structtag"
+  version = "v1.0.0"
+
+[[constraint]]
+  name = "github.com/imdario/mergo"
+  version = "v0.3.7"
 
 [prune]
   go-tests = true

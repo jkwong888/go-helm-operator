@@ -1,4 +1,4 @@
-// Copyright 2019 Google Inc. All rights reserved.
+// Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -6,13 +6,35 @@
 
 // Package healthcare provides access to the Cloud Healthcare API.
 //
-// See https://cloud.google.com/healthcare
+// For product documentation, see: https://cloud.google.com/healthcare
+//
+// Creating a client
 //
 // Usage example:
 //
 //   import "google.golang.org/api/healthcare/v1alpha"
 //   ...
-//   healthcareService, err := healthcare.New(oauthHttpClient)
+//   ctx := context.Background()
+//   healthcareService, err := healthcare.NewService(ctx)
+//
+// In this example, Google Application Default Credentials are used for authentication.
+//
+// For information on how to create and obtain Application Default Credentials, see https://developers.google.com/identity/protocols/application-default-credentials.
+//
+// Other authentication options
+//
+// To use an API key for authentication (note: some APIs do not support API keys), use option.WithAPIKey:
+//
+//   healthcareService, err := healthcare.NewService(ctx, option.WithAPIKey("AIza..."))
+//
+// To use an OAuth token (e.g., a user token obtained via a three-legged OAuth flow), use option.WithTokenSource:
+//
+//   config := &oauth2.Config{...}
+//   // ...
+//   token, err := config.Exchange(ctx, ...)
+//   healthcareService, err := healthcare.NewService(ctx, option.WithTokenSource(config.TokenSource(ctx, token)))
+//
+// See https://godoc.org/google.golang.org/api/option/ for details on options.
 package healthcare // import "google.golang.org/api/healthcare/v1alpha"
 
 import (
@@ -29,6 +51,8 @@ import (
 
 	gensupport "google.golang.org/api/gensupport"
 	googleapi "google.golang.org/api/googleapi"
+	option "google.golang.org/api/option"
+	htransport "google.golang.org/api/transport/http"
 )
 
 // Always reference these packages, just in case the auto-generated code
@@ -56,6 +80,32 @@ const (
 	CloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
 )
 
+// NewService creates a new Service.
+func NewService(ctx context.Context, opts ...option.ClientOption) (*Service, error) {
+	scopesOption := option.WithScopes(
+		"https://www.googleapis.com/auth/cloud-platform",
+	)
+	// NOTE: prepend, so we don't override user-specified scopes.
+	opts = append([]option.ClientOption{scopesOption}, opts...)
+	client, endpoint, err := htransport.NewClient(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+	s, err := New(client)
+	if err != nil {
+		return nil, err
+	}
+	if endpoint != "" {
+		s.BasePath = endpoint
+	}
+	return s, nil
+}
+
+// New creates a new Service. It uses the provided http.Client for requests.
+//
+// Deprecated: please use NewService instead.
+// To provide a custom HTTP client, use option.WithHTTPClient.
+// If you are using google.golang.org/api/googleapis/transport.APIKey, use option.WithAPIKey with NewService instead.
 func New(client *http.Client) (*Service, error) {
 	if client == nil {
 		return nil, errors.New("client is nil")
@@ -630,8 +680,7 @@ func (s *BigQueryLocation) MarshalJSON() ([]byte, error) {
 
 // Binding: Associates `members` with a `role`.
 type Binding struct {
-	// Condition: Unimplemented. The condition that is associated with this
-	// binding.
+	// Condition: The condition that is associated with this binding.
 	// NOTE: an unsatisfied condition will not allow user access via
 	// current
 	// binding. Different bindings, including their conditions, are
@@ -10915,6 +10964,29 @@ type ProjectsLocationsDatasetsFhirStoresResourcesSearchCall struct {
 }
 
 // Search: Searches resources in the given FHIR store.
+//
+// # Search Parameters
+//
+// The server's capability statement, retrieved
+// through
+// GetCapabilityStatement, indicates which search
+// parameters are supported on each FHIR resource.
+//
+// # Search Modifiers
+//
+// Modifier   | Supported
+// ----------- | ---------
+// `:missing`  | Yes
+// `:exact`    | Yes
+// `:contains` | Yes
+// `:text`     | Yes
+// `:in`       | Yes
+// `:not-in`   | Yes
+// `:above`    | Yes
+// `:below`    | Yes
+// `:[type]`   | Yes
+// `:not`      | Yes
+// `:recurse`  | No
 func (r *ProjectsLocationsDatasetsFhirStoresResourcesService) Search(parent string, searchresourcesrequest *SearchResourcesRequest) *ProjectsLocationsDatasetsFhirStoresResourcesSearchCall {
 	c := &ProjectsLocationsDatasetsFhirStoresResourcesSearchCall{s: r.s, urlParams_: make(gensupport.URLParams)}
 	c.parent = parent
@@ -11012,7 +11084,7 @@ func (c *ProjectsLocationsDatasetsFhirStoresResourcesSearchCall) Do(opts ...goog
 	}
 	return ret, nil
 	// {
-	//   "description": "Searches resources in the given FHIR store.",
+	//   "description": "Searches resources in the given FHIR store.\n\n# Search Parameters\n\nThe server's capability statement, retrieved through\nGetCapabilityStatement, indicates which search\nparameters are supported on each FHIR resource.\n\n# Search Modifiers\n\nModifier   | Supported\n----------- | ---------\n`:missing`  | Yes\n`:exact`    | Yes\n`:contains` | Yes\n`:text`     | Yes\n`:in`       | Yes\n`:not-in`   | Yes\n`:above`    | Yes\n`:below`    | Yes\n`:[type]`   | Yes\n`:not`      | Yes\n`:recurse`  | No",
 	//   "flatPath": "v1alpha/projects/{projectsId}/locations/{locationsId}/datasets/{datasetsId}/fhirStores/{fhirStoresId}/resources/_search",
 	//   "httpMethod": "POST",
 	//   "id": "healthcare.projects.locations.datasets.fhirStores.resources._search",
@@ -12362,6 +12434,29 @@ type ProjectsLocationsDatasetsFhirStoresResourcesSearchResourcesCall struct {
 }
 
 // SearchResources: Searches resources in the given FHIR store.
+//
+// # Search Parameters
+//
+// The server's capability statement, retrieved
+// through
+// GetCapabilityStatement, indicates which search
+// parameters are supported on each FHIR resource.
+//
+// # Search Modifiers
+//
+// Modifier   | Supported
+// ----------- | ---------
+// `:missing`  | Yes
+// `:exact`    | Yes
+// `:contains` | Yes
+// `:text`     | Yes
+// `:in`       | Yes
+// `:not-in`   | Yes
+// `:above`    | Yes
+// `:below`    | Yes
+// `:[type]`   | Yes
+// `:not`      | Yes
+// `:recurse`  | No
 func (r *ProjectsLocationsDatasetsFhirStoresResourcesService) SearchResources(parent string, resourceType string) *ProjectsLocationsDatasetsFhirStoresResourcesSearchResourcesCall {
 	c := &ProjectsLocationsDatasetsFhirStoresResourcesSearchResourcesCall{s: r.s, urlParams_: make(gensupport.URLParams)}
 	c.parent = parent
@@ -12468,7 +12563,7 @@ func (c *ProjectsLocationsDatasetsFhirStoresResourcesSearchResourcesCall) Do(opt
 	}
 	return ret, nil
 	// {
-	//   "description": "Searches resources in the given FHIR store.",
+	//   "description": "Searches resources in the given FHIR store.\n\n# Search Parameters\n\nThe server's capability statement, retrieved through\nGetCapabilityStatement, indicates which search\nparameters are supported on each FHIR resource.\n\n# Search Modifiers\n\nModifier   | Supported\n----------- | ---------\n`:missing`  | Yes\n`:exact`    | Yes\n`:contains` | Yes\n`:text`     | Yes\n`:in`       | Yes\n`:not-in`   | Yes\n`:above`    | Yes\n`:below`    | Yes\n`:[type]`   | Yes\n`:not`      | Yes\n`:recurse`  | No",
 	//   "flatPath": "v1alpha/projects/{projectsId}/locations/{locationsId}/datasets/{datasetsId}/fhirStores/{fhirStoresId}/resources/{resourcesId}",
 	//   "httpMethod": "GET",
 	//   "id": "healthcare.projects.locations.datasets.fhirStores.resources.searchResources",

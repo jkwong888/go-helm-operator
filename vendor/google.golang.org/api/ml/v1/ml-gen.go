@@ -1,4 +1,4 @@
-// Copyright 2019 Google Inc. All rights reserved.
+// Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -6,13 +6,35 @@
 
 // Package ml provides access to the Cloud Machine Learning Engine.
 //
-// See https://cloud.google.com/ml/
+// For product documentation, see: https://cloud.google.com/ml/
+//
+// Creating a client
 //
 // Usage example:
 //
 //   import "google.golang.org/api/ml/v1"
 //   ...
-//   mlService, err := ml.New(oauthHttpClient)
+//   ctx := context.Background()
+//   mlService, err := ml.NewService(ctx)
+//
+// In this example, Google Application Default Credentials are used for authentication.
+//
+// For information on how to create and obtain Application Default Credentials, see https://developers.google.com/identity/protocols/application-default-credentials.
+//
+// Other authentication options
+//
+// To use an API key for authentication (note: some APIs do not support API keys), use option.WithAPIKey:
+//
+//   mlService, err := ml.NewService(ctx, option.WithAPIKey("AIza..."))
+//
+// To use an OAuth token (e.g., a user token obtained via a three-legged OAuth flow), use option.WithTokenSource:
+//
+//   config := &oauth2.Config{...}
+//   // ...
+//   token, err := config.Exchange(ctx, ...)
+//   mlService, err := ml.NewService(ctx, option.WithTokenSource(config.TokenSource(ctx, token)))
+//
+// See https://godoc.org/google.golang.org/api/option/ for details on options.
 package ml // import "google.golang.org/api/ml/v1"
 
 import (
@@ -29,6 +51,8 @@ import (
 
 	gensupport "google.golang.org/api/gensupport"
 	googleapi "google.golang.org/api/googleapi"
+	option "google.golang.org/api/option"
+	htransport "google.golang.org/api/transport/http"
 )
 
 // Always reference these packages, just in case the auto-generated code
@@ -56,6 +80,32 @@ const (
 	CloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
 )
 
+// NewService creates a new Service.
+func NewService(ctx context.Context, opts ...option.ClientOption) (*Service, error) {
+	scopesOption := option.WithScopes(
+		"https://www.googleapis.com/auth/cloud-platform",
+	)
+	// NOTE: prepend, so we don't override user-specified scopes.
+	opts = append([]option.ClientOption{scopesOption}, opts...)
+	client, endpoint, err := htransport.NewClient(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+	s, err := New(client)
+	if err != nil {
+		return nil, err
+	}
+	if endpoint != "" {
+		s.BasePath = endpoint
+	}
+	return s, nil
+}
+
+// New creates a new Service. It uses the provided http.Client for requests.
+//
+// Deprecated: please use NewService instead.
+// To provide a custom HTTP client, use option.WithHTTPClient.
+// If you are using google.golang.org/api/googleapis/transport.APIKey, use option.WithAPIKey with NewService instead.
 func New(client *http.Client) (*Service, error) {
 	if client == nil {
 		return nil, errors.New("client is nil")
@@ -413,6 +463,47 @@ func (s *GoogleCloudMlV1__AutoScaling) MarshalJSON() ([]byte, error) {
 	return gensupport.MarshalJSON(raw, s.ForceSendFields, s.NullFields)
 }
 
+// GoogleCloudMlV1__BuiltInAlgorithmOutput: Represents output related to
+// a built-in algorithm Job.
+type GoogleCloudMlV1__BuiltInAlgorithmOutput struct {
+	// Framework: Framework on which the built-in algorithm was trained on.
+	Framework string `json:"framework,omitempty"`
+
+	// ModelPath: Built-in algorithm's saved model path.
+	// Only set for non-hptuning succeeded jobs.
+	ModelPath string `json:"modelPath,omitempty"`
+
+	// PythonVersion: Python version on which the built-in algorithm was
+	// trained on.
+	PythonVersion string `json:"pythonVersion,omitempty"`
+
+	// RuntimeVersion: CMLE runtime version on which the built-in algorithm
+	// was trained on.
+	RuntimeVersion string `json:"runtimeVersion,omitempty"`
+
+	// ForceSendFields is a list of field names (e.g. "Framework") to
+	// unconditionally include in API requests. By default, fields with
+	// empty values are omitted from API requests. However, any non-pointer,
+	// non-interface field appearing in ForceSendFields will be sent to the
+	// server regardless of whether the field is empty or not. This may be
+	// used to include empty fields in Patch requests.
+	ForceSendFields []string `json:"-"`
+
+	// NullFields is a list of field names (e.g. "Framework") to include in
+	// API requests with the JSON null value. By default, fields with empty
+	// values are omitted from API requests. However, any field with an
+	// empty value appearing in NullFields will be sent to the server as
+	// null. It is an error if a field in this list has a non-empty value.
+	// This may be used to include null fields in Patch requests.
+	NullFields []string `json:"-"`
+}
+
+func (s *GoogleCloudMlV1__BuiltInAlgorithmOutput) MarshalJSON() ([]byte, error) {
+	type NoMethod GoogleCloudMlV1__BuiltInAlgorithmOutput
+	raw := NoMethod(*s)
+	return gensupport.MarshalJSON(raw, s.ForceSendFields, s.NullFields)
+}
+
 // GoogleCloudMlV1__CancelJobRequest: Request message for the CancelJob
 // method.
 type GoogleCloudMlV1__CancelJobRequest struct {
@@ -543,6 +634,12 @@ type GoogleCloudMlV1__HyperparameterOutput struct {
 	// not currently
 	// populated.
 	AllMetrics []*GoogleCloudMlV1HyperparameterOutputHyperparameterMetric `json:"allMetrics,omitempty"`
+
+	// BuiltInAlgorithmOutput: Details related to built-in algorithms
+	// job.
+	// Only set this for built-in algorithms jobs and for trials that
+	// succeeded.
+	BuiltInAlgorithmOutput *GoogleCloudMlV1__BuiltInAlgorithmOutput `json:"builtInAlgorithmOutput,omitempty"`
 
 	// FinalMetric: The final objective metric seen for this trial.
 	FinalMetric *GoogleCloudMlV1HyperparameterOutputHyperparameterMetric `json:"finalMetric,omitempty"`
@@ -694,7 +791,8 @@ func (s *GoogleCloudMlV1__HyperparameterSpec) MarshalJSON() ([]byte, error) {
 	return gensupport.MarshalJSON(raw, s.ForceSendFields, s.NullFields)
 }
 
-// GoogleCloudMlV1__Job: Represents a training or prediction job.
+// GoogleCloudMlV1__Job: Represents a training, prediction or
+// explanation job.
 type GoogleCloudMlV1__Job struct {
 	// CreateTime: Output only. When the job was created.
 	CreateTime string `json:"createTime,omitempty"`
@@ -1064,8 +1162,33 @@ type GoogleCloudMlV1__Model struct {
 	// The model name must be unique within the project it is created in.
 	Name string `json:"name,omitempty"`
 
-	// OnlinePredictionLogging: Optional. If true, enables StackDriver
-	// Logging for online prediction.
+	// OnlinePredictionConsoleLogging: Optional. If true, enables logging of
+	// stderr and stdout streams
+	// for online prediction in Stackdriver Logging. These can be more
+	// verbose
+	// than the standard access logs (see `online_prediction_logging`) and
+	// thus
+	// can incur higher cost. However, they are helpful for debugging. Note
+	// that
+	// since Stackdriver logs may incur a cost, particularly if the total
+	// QPS
+	// in your project is high, be sure to estimate your costs before
+	// enabling
+	// this flag.
+	//
+	// Default is false.
+	OnlinePredictionConsoleLogging bool `json:"onlinePredictionConsoleLogging,omitempty"`
+
+	// OnlinePredictionLogging: Optional. If true, online prediction access
+	// logs are sent to StackDriver
+	// Logging. These logs are like standard server access logs,
+	// containing
+	// information like timestamp and latency for each request. Note
+	// that
+	// Stackdriver logs may incur a cost, particular if the total QPS in
+	// your
+	// project is high.
+	//
 	// Default is false.
 	OnlinePredictionLogging bool `json:"onlinePredictionLogging,omitempty"`
 
@@ -1345,17 +1468,21 @@ type GoogleCloudMlV1__PredictionInput struct {
 	//   "JSON" - Each line of the file is a JSON dictionary representing
 	// one record.
 	//   "TEXT" - Deprecated. Use JSON instead.
-	//   "TF_RECORD" - INPUT ONLY. The source file is a TFRecord file.
-	//   "TF_RECORD_GZIP" - INPUT ONLY. The source file is a GZIP-compressed
-	// TFRecord file.
-	//   "CSV" - OUTPUT ONLY. Output values will be in comma-separated rows,
-	// with keys
-	// in a separate file.
+	//   "TF_RECORD" - The source file is a TFRecord file.
+	// Currently available only for input data.
+	//   "TF_RECORD_GZIP" - The source file is a GZIP-compressed TFRecord
+	// file.
+	// Currently available only for input data.
+	//   "CSV" - Values are comma-separated rows, with keys in a separate
+	// file.
+	// Currently available only for output data.
 	DataFormat string `json:"dataFormat,omitempty"`
 
 	// InputPaths: Required. The Google Cloud Storage location of the input
 	// data files.
-	// May contain wildcards.
+	// May contain wildcards. See <a
+	// href="https://cloud.google.com/storage/docs/gsutil/addlhelp/WildcardNa
+	// mes</a>
 	InputPaths []string `json:"inputPaths,omitempty"`
 
 	// MaxWorkerCount: Optional. The maximum number of workers to be used
@@ -1379,12 +1506,14 @@ type GoogleCloudMlV1__PredictionInput struct {
 	//   "JSON" - Each line of the file is a JSON dictionary representing
 	// one record.
 	//   "TEXT" - Deprecated. Use JSON instead.
-	//   "TF_RECORD" - INPUT ONLY. The source file is a TFRecord file.
-	//   "TF_RECORD_GZIP" - INPUT ONLY. The source file is a GZIP-compressed
-	// TFRecord file.
-	//   "CSV" - OUTPUT ONLY. Output values will be in comma-separated rows,
-	// with keys
-	// in a separate file.
+	//   "TF_RECORD" - The source file is a TFRecord file.
+	// Currently available only for input data.
+	//   "TF_RECORD_GZIP" - The source file is a GZIP-compressed TFRecord
+	// file.
+	// Currently available only for input data.
+	//   "CSV" - Values are comma-separated rows, with keys in a separate
+	// file.
+	// Currently available only for output data.
 	OutputDataFormat string `json:"outputDataFormat,omitempty"`
 
 	// OutputPath: Required. The output Google Cloud Storage location.
@@ -1604,7 +1733,8 @@ type GoogleCloudMlV1__TrainingInput struct {
 	// one of
 	// `masterConfig.imageUri` and `runtimeVersion` should be set. Learn
 	// more about
-	// [configuring custom
+	// [configuring
+	// custom
 	// containers](/ml-engine/docs/distributed-training-containers).
 	MasterConfig *GoogleCloudMlV1__ReplicaConfig `json:"masterConfig,omitempty"`
 
@@ -1758,7 +1888,8 @@ type GoogleCloudMlV1__TrainingInput struct {
 	// your parameter server. If `parameterServerConfig.imageUri` has not
 	// been
 	// set, Cloud ML Engine uses the value of `masterConfig.imageUri`.
-	// Learn more about [configuring custom
+	// Learn more about [configuring
+	// custom
 	// containers](/ml-engine/docs/distributed-training-containers).
 	ParameterServerConfig *GoogleCloudMlV1__ReplicaConfig `json:"parameterServerConfig,omitempty"`
 
@@ -1893,7 +2024,8 @@ type GoogleCloudMlV1__TrainingInput struct {
 	// worker. If `workerConfig.imageUri` has not been set, Cloud ML Engine
 	// uses
 	// the value of `masterConfig.imageUri`. Learn more about
-	// [configuring custom
+	// [configuring
+	// custom
 	// containers](/ml-engine/docs/distributed-training-containers).
 	WorkerConfig *GoogleCloudMlV1__ReplicaConfig `json:"workerConfig,omitempty"`
 
@@ -1961,6 +2093,11 @@ func (s *GoogleCloudMlV1__TrainingInput) MarshalJSON() ([]byte, error) {
 // GoogleCloudMlV1__TrainingOutput: Represents results of a training
 // job. Output only.
 type GoogleCloudMlV1__TrainingOutput struct {
+	// BuiltInAlgorithmOutput: Details related to built-in algorithms
+	// job.
+	// Only set for built-in algorithms jobs.
+	BuiltInAlgorithmOutput *GoogleCloudMlV1__BuiltInAlgorithmOutput `json:"builtInAlgorithmOutput,omitempty"`
+
 	// CompletedTrialCount: The number of hyperparameter tuning trials that
 	// completed successfully.
 	// Only set for hyperparameter tuning jobs.
@@ -1968,6 +2105,9 @@ type GoogleCloudMlV1__TrainingOutput struct {
 
 	// ConsumedMLUnits: The amount of ML units consumed by the job.
 	ConsumedMLUnits float64 `json:"consumedMLUnits,omitempty"`
+
+	// IsBuiltInAlgorithmJob: Whether this job is a built-in Algorithm job.
+	IsBuiltInAlgorithmJob bool `json:"isBuiltInAlgorithmJob,omitempty"`
 
 	// IsHyperparameterTuningJob: Whether this job is a hyperparameter
 	// tuning job.
@@ -1977,18 +2117,19 @@ type GoogleCloudMlV1__TrainingOutput struct {
 	// Only set for hyperparameter tuning jobs.
 	Trials []*GoogleCloudMlV1__HyperparameterOutput `json:"trials,omitempty"`
 
-	// ForceSendFields is a list of field names (e.g. "CompletedTrialCount")
-	// to unconditionally include in API requests. By default, fields with
-	// empty values are omitted from API requests. However, any non-pointer,
-	// non-interface field appearing in ForceSendFields will be sent to the
-	// server regardless of whether the field is empty or not. This may be
-	// used to include empty fields in Patch requests.
+	// ForceSendFields is a list of field names (e.g.
+	// "BuiltInAlgorithmOutput") to unconditionally include in API requests.
+	// By default, fields with empty values are omitted from API requests.
+	// However, any non-pointer, non-interface field appearing in
+	// ForceSendFields will be sent to the server regardless of whether the
+	// field is empty or not. This may be used to include empty fields in
+	// Patch requests.
 	ForceSendFields []string `json:"-"`
 
-	// NullFields is a list of field names (e.g. "CompletedTrialCount") to
-	// include in API requests with the JSON null value. By default, fields
-	// with empty values are omitted from API requests. However, any field
-	// with an empty value appearing in NullFields will be sent to the
+	// NullFields is a list of field names (e.g. "BuiltInAlgorithmOutput")
+	// to include in API requests with the JSON null value. By default,
+	// fields with empty values are omitted from API requests. However, any
+	// field with an empty value appearing in NullFields will be sent to the
 	// server as null. It is an error if a field in this list has a
 	// non-empty value. This may be used to include null fields in Patch
 	// requests.
@@ -2025,7 +2166,7 @@ func (s *GoogleCloudMlV1__TrainingOutput) UnmarshalJSON(data []byte) error {
 // calling
 // [projects.models.versions.list](/ml-engine/reference/rest/v1/p
 // rojects.models.versions/list).
-// Next ID: 29
+// Next ID: 30
 type GoogleCloudMlV1__Version struct {
 	// AutoScaling: Automatically scale the number of nodes used to serve
 	// the model in
@@ -2805,20 +2946,20 @@ type GoogleProtobuf__Empty struct {
 }
 
 // GoogleRpc__Status: The `Status` type defines a logical error model
-// that is suitable for different
-// programming environments, including REST APIs and RPC APIs. It is
-// used by
-// [gRPC](https://github.com/grpc). The error model is designed to
-// be:
+// that is suitable for
+// different programming environments, including REST APIs and RPC APIs.
+// It is
+// used by [gRPC](https://github.com/grpc). The error model is designed
+// to be:
 //
 // - Simple to use and understand for most users
 // - Flexible enough to meet unexpected needs
 //
 // # Overview
 //
-// The `Status` message contains three pieces of data: error code, error
-// message,
-// and error details. The error code should be an enum value
+// The `Status` message contains three pieces of data: error code,
+// error
+// message, and error details. The error code should be an enum value
 // of
 // google.rpc.Code, but it may accept additional error codes if needed.
 // The

@@ -1,4 +1,4 @@
-// Copyright 2019 Google Inc. All rights reserved.
+// Copyright 2019 Google LLC.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -6,13 +6,39 @@
 
 // Package appengine provides access to the App Engine Admin API.
 //
-// See https://cloud.google.com/appengine/docs/admin-api/
+// For product documentation, see: https://cloud.google.com/appengine/docs/admin-api/
+//
+// Creating a client
 //
 // Usage example:
 //
 //   import "google.golang.org/api/appengine/v1"
 //   ...
-//   appengineService, err := appengine.New(oauthHttpClient)
+//   ctx := context.Background()
+//   appengineService, err := appengine.NewService(ctx)
+//
+// In this example, Google Application Default Credentials are used for authentication.
+//
+// For information on how to create and obtain Application Default Credentials, see https://developers.google.com/identity/protocols/application-default-credentials.
+//
+// Other authentication options
+//
+// By default, all available scopes (see "Constants") are used to authenticate. To restrict scopes, use option.WithScopes:
+//
+//   appengineService, err := appengine.NewService(ctx, option.WithScopes(appengine.CloudPlatformReadOnlyScope))
+//
+// To use an API key for authentication (note: some APIs do not support API keys), use option.WithAPIKey:
+//
+//   appengineService, err := appengine.NewService(ctx, option.WithAPIKey("AIza..."))
+//
+// To use an OAuth token (e.g., a user token obtained via a three-legged OAuth flow), use option.WithTokenSource:
+//
+//   config := &oauth2.Config{...}
+//   // ...
+//   token, err := config.Exchange(ctx, ...)
+//   appengineService, err := appengine.NewService(ctx, option.WithTokenSource(config.TokenSource(ctx, token)))
+//
+// See https://godoc.org/google.golang.org/api/option/ for details on options.
 package appengine // import "google.golang.org/api/appengine/v1"
 
 import (
@@ -29,6 +55,8 @@ import (
 
 	gensupport "google.golang.org/api/gensupport"
 	googleapi "google.golang.org/api/googleapi"
+	option "google.golang.org/api/option"
+	htransport "google.golang.org/api/transport/http"
 )
 
 // Always reference these packages, just in case the auto-generated code
@@ -62,6 +90,34 @@ const (
 	CloudPlatformReadOnlyScope = "https://www.googleapis.com/auth/cloud-platform.read-only"
 )
 
+// NewService creates a new APIService.
+func NewService(ctx context.Context, opts ...option.ClientOption) (*APIService, error) {
+	scopesOption := option.WithScopes(
+		"https://www.googleapis.com/auth/appengine.admin",
+		"https://www.googleapis.com/auth/cloud-platform",
+		"https://www.googleapis.com/auth/cloud-platform.read-only",
+	)
+	// NOTE: prepend, so we don't override user-specified scopes.
+	opts = append([]option.ClientOption{scopesOption}, opts...)
+	client, endpoint, err := htransport.NewClient(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+	s, err := New(client)
+	if err != nil {
+		return nil, err
+	}
+	if endpoint != "" {
+		s.BasePath = endpoint
+	}
+	return s, nil
+}
+
+// New creates a new APIService. It uses the provided http.Client for requests.
+//
+// Deprecated: please use NewService instead.
+// To provide a custom HTTP client, use option.WithHTTPClient.
+// If you are using google.golang.org/api/googleapis/transport.APIKey, use option.WithAPIKey with NewService instead.
 func New(client *http.Client) (*APIService, error) {
 	if client == nil {
 		return nil, errors.New("client is nil")
@@ -1303,6 +1359,11 @@ type FeatureSettings struct {
 	// legacy 'health_check' behavior is deprecated, and this value is
 	// always true, this setting can be removed.
 	SplitHealthChecks bool `json:"splitHealthChecks,omitempty"`
+
+	// UseContainerOptimizedOs: If true, use Container-Optimized OS
+	// (https://cloud.google.com/container-optimized-os/) base image for
+	// VMs, rather than a base Debian image.
+	UseContainerOptimizedOs bool `json:"useContainerOptimizedOs,omitempty"`
 
 	// ForceSendFields is a list of field names (e.g. "SplitHealthChecks")
 	// to unconditionally include in API requests. By default, fields with
@@ -3476,6 +3537,9 @@ type Version struct {
 	// machine.
 	Vm bool `json:"vm,omitempty"`
 
+	// VpcAccessConnector: Enables VPC connectivity for standard apps.
+	VpcAccessConnector *VpcAccessConnector `json:"vpcAccessConnector,omitempty"`
+
 	// Zones: The Google Compute Engine zones that are supported by this
 	// version in the App Engine flexible environment. Deprecated.
 	Zones []string `json:"zones,omitempty"`
@@ -3554,6 +3618,35 @@ func (s *Volume) UnmarshalJSON(data []byte) error {
 	}
 	s.SizeGb = float64(s1.SizeGb)
 	return nil
+}
+
+// VpcAccessConnector: VPC access connector specification.
+type VpcAccessConnector struct {
+	// Name: Full Serverless VPC Access Connector name e.g.
+	// /projects/my-project/locations/us-central1/connectors/c1.
+	Name string `json:"name,omitempty"`
+
+	// ForceSendFields is a list of field names (e.g. "Name") to
+	// unconditionally include in API requests. By default, fields with
+	// empty values are omitted from API requests. However, any non-pointer,
+	// non-interface field appearing in ForceSendFields will be sent to the
+	// server regardless of whether the field is empty or not. This may be
+	// used to include empty fields in Patch requests.
+	ForceSendFields []string `json:"-"`
+
+	// NullFields is a list of field names (e.g. "Name") to include in API
+	// requests with the JSON null value. By default, fields with empty
+	// values are omitted from API requests. However, any field with an
+	// empty value appearing in NullFields will be sent to the server as
+	// null. It is an error if a field in this list has a non-empty value.
+	// This may be used to include null fields in Patch requests.
+	NullFields []string `json:"-"`
+}
+
+func (s *VpcAccessConnector) MarshalJSON() ([]byte, error) {
+	type NoMethod VpcAccessConnector
+	raw := NoMethod(*s)
+	return gensupport.MarshalJSON(raw, s.ForceSendFields, s.NullFields)
 }
 
 // ZipInfo: The zip file information for a zip deployment.
