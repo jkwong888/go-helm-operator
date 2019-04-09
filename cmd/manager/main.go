@@ -19,6 +19,7 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/metrics"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	"github.com/spf13/pflag"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
@@ -61,10 +62,18 @@ func main() {
 
 	printVersion()
 
-	namespace, err := k8sutil.GetWatchNamespace()
-	if err != nil {
-		log.Error(err, "Failed to get watch namespace")
-		os.Exit(1)
+	namespace, found := os.LookupEnv(k8sutil.WatchNamespaceEnvVar)
+	log = log.WithValues("Namespace", namespace)
+	if found {
+		if namespace == metav1.NamespaceAll {
+			log.Info("Watching all namespaces.")
+		} else {
+			log.Info("Watching single namespace.")
+		}
+	} else {
+		log.Info(fmt.Sprintf("%v environment variable not set. Watching all namespaces.",
+			k8sutil.WatchNamespaceEnvVar))
+		namespace = metav1.NamespaceAll
 	}
 
 	// Get a config to talk to the apiserver

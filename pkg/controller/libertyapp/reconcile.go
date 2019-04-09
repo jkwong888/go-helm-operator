@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jkwong888/websphere-liberty-operator/internal/util/diffutil"
 	libertyv1alpha1 "github.com/jkwong888/websphere-liberty-operator/pkg/apis/liberty/v1alpha1"
+	"github.com/jkwong888/websphere-liberty-operator/pkg/internal/util/diffutil"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -61,7 +61,14 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	o := instance.ToUnstructured()
+	oMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(instance)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	o := &unstructured.Unstructured{
+		Object: oMap,
+	}
 
 	log := log.WithValues(
 		"namespace", o.GetNamespace(),
