@@ -145,7 +145,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		fmt.Printf("%d bytes written to %s. ", i, os.Args[4])
+		fmt.Printf("%d bytes written to %s.\n", i, os.Args[4])
 
 		f.Close()
 

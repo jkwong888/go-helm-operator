@@ -9,6 +9,7 @@ required = [
   "k8s.io/kube-openapi/cmd/openapi-gen",
   "k8s.io/gengo/args",
   "sigs.k8s.io/controller-tools/pkg/crd/generator",
+  "github.com/containers/image",
 ]
 
 [[override]]
@@ -101,12 +102,8 @@ required = [
   version = "2.2.2"
 
 [[constraint]]
-  name = "github.com/fatih/structtag"
-  version = "v1.0.0"
-
-[[constraint]]
-  name = "github.com/imdario/mergo"
-  version = "v0.3.7"
+  name = "github.com/containers/image"
+  version = "v1.5"
 
 [prune]
   go-tests = true

@@ -17,10 +17,9 @@ EOF
 }
 
 # build deepcopy-gen binary
-go build -o ${SCRIPT_ROOT}/bin/deepcopy-gen ${SCRIPT_ROOT}/vendor/k8s.io/code-generator/cmd/deepcopy-gen
+go build -o ${SCRIPT_ROOT}/build/_output/bin/deepcopy-gen ${SCRIPT_ROOT}/vendor/k8s.io/code-generator/cmd/deepcopy-gen
 
 # add doc.go to the following packages:
-
 dirs="\
 k8s.io/helm/pkg/proto/hapi/release \
 k8s.io/helm/pkg/proto/hapi/chart \
@@ -31,13 +30,15 @@ for d in ${dirs}; do
     create_doc_go ${SCRIPT_ROOT}/vendor/${d}
 done
 
-echo "Generating zz_generated.deepcopy.go ..."
-${SCRIPT_ROOT}/bin/deepcopy-gen \
+echo "Generating zz_generated.deepcopy.go for vendored packages ..."
+${SCRIPT_ROOT}/build/_output/bin/deepcopy-gen \
+    --go-header-file ${SCRIPT_ROOT}/vendor/k8s.io/code-generator/hack/boilerplate.go.txt \
     --input-dirs `echo ${dirs} | sed -e 's/ /,/g'` \
-    --output-package github.com/jkwong888/websphere-liberty-operator/pkg/apis/liberty/v1alpha1 \
+    --output-base ${SCRIPT_ROOT}/vendor \
     -O zz_generated.deepcopy
 
-${SCRIPT_ROOT}/bin/deepcopy-gen \
+echo "Generating zz_generated.deepcopy.go for pkg/apis/liberty/v1alpha1 ..."
+${SCRIPT_ROOT}/build/_output/bin/deepcopy-gen \
+    --go-header-file ${SCRIPT_ROOT}/vendor/k8s.io/code-generator/hack/boilerplate.go.txt \
     --input-dirs github.com/jkwong888/websphere-liberty-operator/pkg/apis/liberty/v1alpha1 \
-    --output-package github.com/jkwong888/websphere-liberty-operator/pkg/apis/liberty/v1alpha1 \
     -O zz_generated.deepcopy

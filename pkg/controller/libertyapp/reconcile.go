@@ -3,10 +3,17 @@ package libertyapp
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"gopkg.in/yaml.v2"
+
+	"k8s.io/helm/pkg/kube"
+
 	libertyv1alpha1 "github.com/jkwong888/websphere-liberty-operator/pkg/apis/liberty/v1alpha1"
+	"github.com/jkwong888/websphere-liberty-operator/pkg/image"
 	"github.com/jkwong888/websphere-liberty-operator/pkg/internal/util/diffutil"
+	"github.com/jkwong888/websphere-liberty-operator/pkg/release"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/operator-framework/operator-sdk/pkg/helm/release"
+	cpb "k8s.io/helm/pkg/proto/hapi/chart"
 	rpb "k8s.io/helm/pkg/proto/hapi/release"
 )
 
@@ -31,6 +38,7 @@ type ReleaseHookFunc func(*rpb.Release) error
 type ReconcileLibertyApp struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
+	KubeClient      *kube.Client
 	Client          client.Client
 	scheme          *runtime.Scheme
 	ManagerFactory  release.ManagerFactory
@@ -66,6 +74,8 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	// TODO: here we're taking advantage of
+
 	o := &unstructured.Unstructured{
 		Object: oMap,
 	}
@@ -98,12 +108,28 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{Requeue: true}, err
 	}
 
+	secretName := instance.Spec.Image.PullSecret
+	clientset, err := r.KubeClient.KubernetesClientSet()
+	if err != nil {
+		log.Error(err, "Failed to get kube client")
+	}
+
+	// TODO: would prefer the liberty chart creates a new service account instead of using "default"
+	// for now we'll patch the "default" service account with the pull secret here
+	if secretName != nil {
+		err = image.AddPullSecretToServiceAccount(clientset, request.Namespace, "default", secretName)
+		if err != nil {
+			log.Error(err, "Failed to patch service account")
+			return reconcile.Result{}, err
+		}
+	}
+
 	status.SetCondition(libertyv1alpha1.AppCondition{
 		Type:   libertyv1alpha1.ConditionInitialized,
 		Status: libertyv1alpha1.StatusTrue,
 	})
 
-	if err := manager.Sync(context.TODO()); err != nil {
+	if err := manager.Sync(context.TODO(), r.transformRelease); err != nil {
 		log.Error(err, "Failed to sync release")
 		status.SetCondition(libertyv1alpha1.AppCondition{
 			Type:    libertyv1alpha1.ConditionIrreconcilable,
@@ -190,6 +216,7 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 		}
 
 		log.Info("Installed release")
+
 		if log.Enabled() {
 			fmt.Println(diffutil.Diff("", installedRelease.GetManifest()))
 		}
@@ -201,8 +228,10 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 			Message: installedRelease.GetInfo().GetStatus().GetNotes(),
 			Release: installedRelease,
 		})
+
 		err = r.updateResourceStatus(o, status)
 		return reconcile.Result{RequeueAfter: r.ReconcilePeriod}, err
+
 	}
 
 	if manager.IsUpdateRequired() {
@@ -267,7 +296,82 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 
 	log.Info("Reconciled release")
 	err = r.updateResourceStatus(o, status)
+
 	return reconcile.Result{RequeueAfter: r.ReconcilePeriod}, err
+}
+
+func (r *ReconcileLibertyApp) transformRelease(namespace string, chart *cpb.Chart, config *cpb.Config) error {
+	clientset, err := r.KubeClient.KubernetesClientSet()
+	if err != nil {
+		log.Error(err, "Failed to get kube client")
+	}
+
+	defaultMap := make(map[string]interface{})
+	err = yaml.Unmarshal([]byte(chart.Values.Raw), &defaultMap)
+	if err != nil {
+		log.Error(err, "Failed to unmarshal raw values")
+	}
+
+	defaultImageSpec := defaultMap["image"].(map[interface{}]interface{})
+	imageRepo := defaultImageSpec["repository"]
+	imageTag := defaultImageSpec["tag"]
+	var secretName *string
+
+	/* parse config.Raw to get the overridden image repo and tag */
+	valueMap := make(map[interface{}]interface{})
+	err = yaml.Unmarshal([]byte(config.Raw), &valueMap)
+	if err != nil {
+		log.Error(err, "Failed to unmarshal raw values")
+	}
+
+	imageSpec := valueMap["image"].(map[interface{}]interface{})
+	if imageSpec != nil {
+		imageRepo = imageSpec["repository"]
+		imageTag = imageSpec["tag"]
+		secretNameTmp := imageSpec["pullSecret"].(string)
+		secretName = &secretNameTmp
+	}
+
+	imageName := fmt.Sprintf("%s:%s", imageRepo, imageTag)
+
+	img, err := image.NewLibertyAppImage(clientset, imageName, namespace, secretName)
+	if err != nil {
+		log.Error(err, "Failed to get image", "image", imageName)
+	}
+
+	// get the image digest, which may look like sha256:abcdefg12356....
+	digest, err := img.GetDigest(context.TODO())
+	if err != nil {
+		log.Error(err, "Failed to get image digest", "image", imageName)
+	}
+
+	// to grab an image by digest from the image repository, use the repo@sha256:abcdefg123456
+	newImageName := fmt.Sprintf("%s@%s", imageRepo, *digest)
+
+	// this is a small hack to get the image to be split the way we like, so the new
+	// repository is repo@sha256 and the tag is abcdefg123456
+	newImgSplit := strings.Split(newImageName, ":")
+
+	if imageSpec == nil {
+		imageSpec = make(map[interface{}]interface{})
+	}
+
+	imageSpec["repository"] = newImgSplit[0]
+	imageSpec["tag"] = newImgSplit[1]
+	valueMap["image"] = imageSpec
+
+	out, err := yaml.Marshal(valueMap)
+	if err != nil {
+		log.Error(err, "Failed to Marshal updated values")
+	}
+
+	config.Raw = string(out)
+
+	log.V(1).Info("Updating chart parameters with liberty image digest",
+		"LibertyAppImage", imageName,
+		"Digest", digest)
+
+	return nil
 }
 
 func (r ReconcileLibertyApp) updateResource(o *unstructured.Unstructured) error {

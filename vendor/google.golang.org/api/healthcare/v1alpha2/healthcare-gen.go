@@ -1006,16 +1006,20 @@ func (s *DeidentifyConfig) MarshalJSON() ([]byte, error) {
 // DeidentifyDatasetRequest: Redacts identifying information from the
 // specified dataset.
 type DeidentifyDatasetRequest struct {
-	// Config: Deidentify configuration
+	// Config: Deidentify configuration.
 	Config *DeidentifyConfig `json:"config,omitempty"`
 
-	// DestinationDataset: The name of the dataset resource to which the
-	// redacted data should be
-	// written
+	// DestinationDataset: The name of the dataset resource to create and
+	// write the redacted data
+	// to
 	// (e.g.,
-	// `projects/{project_id}/locations/{location_id}/datasets/{datase
-	// t_id}`).
-	// The new dataset must not exist, or the request will fail.
+	// `projects/{project_id}/locations/{location_id}/datasets/{dat
+	// aset_id}`).
+	//
+	//  * The destination dataset must not exist.
+	//  * The destination dataset must be in the same project as the source
+	//    dataset. De-identifying data across multiple projects is not
+	// supported.
 	DestinationDataset string `json:"destinationDataset,omitempty"`
 
 	// ForceSendFields is a list of field names (e.g. "Config") to
@@ -1159,10 +1163,11 @@ type DicomConfig struct {
 	// Profile (DICOM Standard Edition 2018e).
 	//   "KEEP_ALL_PROFILE" - Keep all tags.
 	//   "DEIDENTIFY_TAG_CONTENTS" - Inspects within tag contents and
-	// replaces sensitive text with its type.
+	// replaces sensitive text. The process
+	// can be configured using the TextConfig.
 	// Applies to all tags with the following Value Representation
 	// names:
-	// AE, LO, LT, PN, SH, ST, UC, UT
+	// AE, LO, LT, PN, SH, ST, UC, UT, DA, DT, AS
 	FilterProfile string `json:"filterProfile,omitempty"`
 
 	// KeepList: List of tags to keep. Remove all other tags.
@@ -2381,14 +2386,6 @@ func (s *ImageConfig) MarshalJSON() ([]byte, error) {
 // ImportDicomDataErrorDetails: Returns the errors encountered during
 // DICOM store import.
 type ImportDicomDataErrorDetails struct {
-	// DicomStore: The name of the DICOM store where the resources have been
-	// imported, in
-	// the
-	// format
-	// `projects/{project_id}/locations/{location_id}/datasets/{da
-	// taset_id}/dicomStores/{dicom_store_id}`
-	DicomStore string `json:"dicomStore,omitempty"`
-
 	// SampleErrors: Deprecated. Use only for debugging purposes.
 	//
 	// Contains sample errors encountered in imports of individual
@@ -2396,7 +2393,7 @@ type ImportDicomDataErrorDetails struct {
 	// (for example, a Cloud Storage object).
 	SampleErrors []*ErrorDetail `json:"sampleErrors,omitempty"`
 
-	// ForceSendFields is a list of field names (e.g. "DicomStore") to
+	// ForceSendFields is a list of field names (e.g. "SampleErrors") to
 	// unconditionally include in API requests. By default, fields with
 	// empty values are omitted from API requests. However, any non-pointer,
 	// non-interface field appearing in ForceSendFields will be sent to the
@@ -2404,10 +2401,10 @@ type ImportDicomDataErrorDetails struct {
 	// used to include empty fields in Patch requests.
 	ForceSendFields []string `json:"-"`
 
-	// NullFields is a list of field names (e.g. "DicomStore") to include in
-	// API requests with the JSON null value. By default, fields with empty
-	// values are omitted from API requests. However, any field with an
-	// empty value appearing in NullFields will be sent to the server as
+	// NullFields is a list of field names (e.g. "SampleErrors") to include
+	// in API requests with the JSON null value. By default, fields with
+	// empty values are omitted from API requests. However, any field with
+	// an empty value appearing in NullFields will be sent to the server as
 	// null. It is an error if a field in this list has a non-empty value.
 	// This may be used to include null fields in Patch requests.
 	NullFields []string `json:"-"`

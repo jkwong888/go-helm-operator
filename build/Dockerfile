@@ -7,6 +7,9 @@ ENV OPERATOR=/usr/local/bin/websphere-liberty-operator \
 # install operator binary
 COPY build/_output/bin/websphere-liberty-operator ${OPERATOR}
 
+RUN mkdir -p /opt/helm/charts
+COPY build/_output/chart/stable/ibm-websphere-liberty/* /opt/helm/charts/
+
 COPY build/bin /usr/local/bin
 RUN  /usr/local/bin/user_setup
 

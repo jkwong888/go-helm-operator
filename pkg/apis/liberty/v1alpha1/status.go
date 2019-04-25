@@ -6,8 +6,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/helm/pkg/proto/hapi/release"
 )
+
+// TODO this is essentially cut & paste from operator-sdk HelmAppStatus, because it's an
+// internal type and we can't import it directly
 
 type AppConditionType string
 type AppConditionStatus string
@@ -19,8 +23,13 @@ type AppCondition struct {
 	Reason  AppConditionReason `json:"reason,omitempty"`
 	Message string             `json:"message,omitempty"`
 	Release *release.Release   `json:"release,omitempty"`
+	//Resources []AppResource `json: resources, omitempty`
 
 	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
+}
+
+type AppResource struct {
+	GroupVersionKind schema.GroupVersionKind `json:gvk,omitempty`
 }
 
 const (
