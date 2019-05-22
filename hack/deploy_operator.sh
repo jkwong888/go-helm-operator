@@ -10,7 +10,7 @@ docker run \
   -v ${GOPATH}:${GOPATH} \
   -e GOPATH=${GOPATH} \
   -w `pwd` \
-  golang:1.11 \
+  golang:1.12 \
   go build -v -o build/_output/bin/websphere-liberty-operator ./cmd/manager
 
 # build the docker image
