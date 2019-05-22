@@ -22,15 +22,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	yaml "gopkg.in/yaml.v2"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	apitypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/cli-runtime/pkg/genericclioptions/resource"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/helm/pkg/chartutil"
 	"k8s.io/helm/pkg/kube"
 	cpb "k8s.io/helm/pkg/proto/hapi/chart"
@@ -39,7 +45,7 @@ import (
 	"k8s.io/helm/pkg/storage"
 	"k8s.io/helm/pkg/tiller"
 
-	libertyv1alpha1 "github.com/jkwong888/websphere-liberty-operator/pkg/apis/liberty/v1alpha1"
+	"github.com/jkwong888/websphere-liberty-operator/pkg/internal/util/yamlutil"
 	"github.com/mattbaird/jsonpatch"
 )
 
@@ -48,7 +54,7 @@ var (
 	ErrNotFound = errors.New("release not found")
 )
 
-type transformFunc func(string, *cpb.Chart, *cpb.Config) error
+type transformFunc func(objectMap map[string]runtime.Object) (map[string]runtime.Object, error)
 
 // Manager manages a Helm release. It can install, update, reconcile,
 // and uninstall a release.
@@ -68,18 +74,23 @@ type manager struct {
 	tillerKubeClient *kube.Client
 	chartDir         string
 
+	//TODO hang on to the groupResources of the cluster so we don't get them every loop
+
 	tiller      *tiller.ReleaseServer
 	releaseName string
 	namespace   string
 
 	spec   interface{}
-	status *libertyv1alpha1.AppStatus
+	status *AppStatus
 
 	isInstalled      bool
 	isUpdateRequired bool
 	deployedRelease  *rpb.Release
 	chart            *cpb.Chart
 	config           *cpb.Config
+
+	pendingRelease *rpb.Release
+	objects        map[string]runtime.Object
 }
 
 // ReleaseName returns the name of the release.
@@ -128,16 +139,32 @@ func (m *manager) Sync(ctx context.Context, transform transformFunc) error {
 	m.chart = chart
 	m.config = config
 
-	err = transform(m.namespace, chart, config)
-	if err != nil {
-		return fmt.Errorf("failed to call transform function: %s", err)
-	}
-
 	// Load the most recently deployed release from the storage backend.
 	deployedRelease, err := m.getDeployedRelease()
 	if err == ErrNotFound {
+		// render the chart here
+		m.pendingRelease, err = renderRelease(ctx, m.tiller, m.tillerKubeClient, m.namespace, m.releaseName, chart, config)
+		if err != nil {
+			return fmt.Errorf("failed to get candidate release: %s", err)
+		}
+
+		// get the objects that will be created as part of the chart
+		objects, err := getReleaseObjects(m.pendingRelease)
+		if err != nil {
+			return fmt.Errorf("failed to render candidate release: %s", err)
+		}
+
+		// allow the caller to transform generated objects
+		if transform != nil {
+			m.objects, err = transform(objects)
+			if err != nil {
+				return fmt.Errorf("failed to call transform function: %s", err)
+			}
+		}
+
 		return nil
 	}
+
 	if err != nil {
 		return fmt.Errorf("failed to get deployed release: %s", err)
 	}
@@ -145,21 +172,73 @@ func (m *manager) Sync(ctx context.Context, transform transformFunc) error {
 	m.isInstalled = true
 
 	// Get the next candidate release to determine if an update is necessary.
-	candidateRelease, err := m.getCandidateRelease(ctx, m.tiller, m.releaseName, chart, config)
+	m.pendingRelease, err = getCandidateRelease(ctx, m.tiller, m.releaseName, chart, config)
 	if err != nil {
 		return fmt.Errorf("failed to get candidate release: %s", err)
 	}
-	if deployedRelease.GetManifest() != candidateRelease.GetManifest() {
+
+	// get the objects that will be created as part of the chart
+	objects, err := getReleaseObjects(m.pendingRelease)
+	if err != nil {
+		return fmt.Errorf("failed to render candidate release: %s", err)
+	}
+
+	// allow the caller to transform generated objects
+	if transform != nil {
+		m.objects, err = transform(objects)
+		if err != nil {
+			return fmt.Errorf("failed to call transform function: %s", err)
+		}
+	}
+
+	// get the deployed objects from last release
+	deployedObjects, err := getReleaseObjects(deployedRelease)
+	if err != nil {
+		return fmt.Errorf("failed to render deployed release: %s", err)
+	}
+
+	// compare the two object maps; we'll do this with maps
+	/*
+		if !reflect.DeepEqual(m.objects, deployedObjects) {
+			m.isUpdateRequired = true
+		}
+	*/
+
+	for k, v := range deployedObjects {
+		pendingObj := m.objects[k]
+
+		if pendingObj == nil {
+			// not in the pending release, object was deleted
+			m.isUpdateRequired = true
+			break
+		}
+
+		// compare the two objects, if the objects aren't equal, update required
+		if !reflect.DeepEqual(pendingObj, v) {
+			m.isUpdateRequired = true
+			break
+		}
+	}
+
+	// check for new objects
+	for k := range m.objects {
+		if deployedObjects[k] != nil {
+			// existing objects were handled in the above loop
+			continue
+		}
+
+		// at this point, the object is new in this release and must be created
 		m.isUpdateRequired = true
+		break
 	}
 
 	return nil
 }
 
-func (m manager) syncReleaseStatus(status libertyv1alpha1.AppStatus) error {
+func (m manager) syncReleaseStatus(status AppStatus) error {
 	var release *rpb.Release
 	for _, condition := range status.Conditions {
-		if condition.Type == libertyv1alpha1.ConditionDeployed && condition.Status == libertyv1alpha1.StatusTrue {
+		if condition.Type == ConditionDeployed && condition.Status == StatusTrue {
 			release = condition.Release
 			break
 		}
@@ -232,7 +311,7 @@ func (m manager) getDeployedRelease() (*rpb.Release, error) {
 	return deployedRelease, nil
 }
 
-func (m manager) getCandidateRelease(ctx context.Context, tiller *tiller.ReleaseServer, name string, chart *cpb.Chart, config *cpb.Config) (*rpb.Release, error) {
+func getCandidateRelease(ctx context.Context, tiller *tiller.ReleaseServer, name string, chart *cpb.Chart, config *cpb.Config) (*rpb.Release, error) {
 	dryRunReq := &services.UpdateReleaseRequest{
 		Name:   name,
 		Chart:  chart,
@@ -246,17 +325,19 @@ func (m manager) getCandidateRelease(ctx context.Context, tiller *tiller.Release
 	return dryRunResponse.GetRelease(), nil
 }
 
-// InstallRelease performs a Helm release install.
-func (m manager) InstallRelease(ctx context.Context) (*rpb.Release, error) {
-	return installRelease(ctx, m.tiller, m.namespace, m.releaseName, m.chart, m.config)
-}
-
-func installRelease(ctx context.Context, tiller *tiller.ReleaseServer, namespace, name string, chart *cpb.Chart, config *cpb.Config) (*rpb.Release, error) {
+func renderRelease(ctx context.Context,
+	tiller *tiller.ReleaseServer,
+	tillerKubeClient *kube.Client,
+	namespace string,
+	name string,
+	chart *cpb.Chart,
+	config *cpb.Config) (*rpb.Release, error) {
 	installReq := &services.InstallReleaseRequest{
 		Namespace: namespace,
 		Name:      name,
 		Chart:     chart,
 		Values:    config,
+		DryRun:    true,
 	}
 
 	releaseResponse, err := tiller.InstallRelease(ctx, installReq)
@@ -274,38 +355,238 @@ func installRelease(ctx context.Context, tiller *tiller.ReleaseServer, namespace
 		}
 		return nil, err
 	}
-	return releaseResponse.GetRelease(), nil
+
+	return releaseResponse.Release, nil
+}
+
+// InstallRelease performs a Helm release install.
+func (m manager) InstallRelease(ctx context.Context) (*rpb.Release, error) {
+	return installRelease(ctx, m.tillerKubeClient, m.storageBackend, m.pendingRelease, m.objects)
+}
+
+func installRelease(ctx context.Context,
+	kubeClient *kube.Client,
+	storageBackend *storage.Storage,
+	release *rpb.Release,
+	objects map[string]runtime.Object) (*rpb.Release, error) {
+
+	// write the resulting objects to the API server one by one
+	// TODO: here we may wish to allow the controller to sort or prune the objects
+	// so it can handle dependencies or other such special cases
+	dynamicClient, err := kubeClient.DynamicClient()
+	if err != nil {
+		return nil, err
+	}
+
+	clientset, err := kubeClient.KubernetesClientSet()
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO this shouldn't change too often so maybe it's ok to cache this
+	groupResources, err := restmapper.GetAPIGroupResources(clientset.Discovery())
+	if err != nil {
+		return nil, err
+	}
+
+	rm := restmapper.NewDiscoveryRESTMapper(groupResources)
+
+	// track all the installed objects
+	var installed []unstructured.Unstructured
+
+	for _, v := range objects {
+		gvk := v.GetObjectKind().GroupVersionKind()
+		gk := schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}
+		mapping, err := rm.RESTMapping(gk, gvk.Version)
+
+		// convert the runtime.Object to unstructured.Unstructured
+		oMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(v)
+		if err != nil {
+			return nil, err
+		}
+		unstructuredObj := &unstructured.Unstructured{
+			Object: oMap,
+		}
+
+		// create this object
+		_, err = dynamicClient.Resource(mapping.Resource).Namespace(release.GetNamespace()).Create(unstructuredObj, metav1.CreateOptions{})
+		if err != nil {
+			if apierrors.IsAlreadyExists(err) {
+				log.Info("Error creating resource, already exists", "namespace", release.GetNamespace(), "gvk", gvk, "release", release.GetName(), "name", unstructuredObj.GetName())
+				installed = append(installed, *unstructuredObj)
+				continue
+			} else {
+				log.Error(err, "Error creating resource", "namespace", release.GetNamespace(), "gvk", gvk, "release", release.GetName(), "name", unstructuredObj.GetName())
+				return nil, err
+			}
+		}
+
+		// track the installed object and add it to the manifest later
+		installed = append(installed, *unstructuredObj)
+
+		log.Info("Created resource", "namespace", release.GetNamespace(), "gvk", gvk, "release", release.GetName(), "name", unstructuredObj.GetName())
+	}
+
+	// hack, just set the release as deployed so the sync code doesn't try to remove it
+	release.Info.Status.Code = rpb.Status_DEPLOYED
+
+	// take the installed objects and write them to the release
+	release.Manifest, err = toManifest(installed)
+	if err != nil {
+		return nil, err
+	}
+
+	err = storageBackend.Create(release)
+	if err != nil {
+		log.Error(err, "Error writing release to storage backend", "namespace", release.GetNamespace(), "name", release.GetName())
+	}
+
+	return release, nil
 }
 
 // UpdateRelease performs a Helm release update.
 func (m manager) UpdateRelease(ctx context.Context) (*rpb.Release, *rpb.Release, error) {
-	updatedRelease, err := updateRelease(ctx, m.tiller, m.releaseName, m.chart, m.config)
+	updatedRelease, err := updateRelease(ctx, m.tillerKubeClient, m.storageBackend, m.deployedRelease, m.pendingRelease, m.objects)
 	return m.deployedRelease, updatedRelease, err
 }
 
-func updateRelease(ctx context.Context, tiller *tiller.ReleaseServer, name string, chart *cpb.Chart, config *cpb.Config) (*rpb.Release, error) {
-	updateReq := &services.UpdateReleaseRequest{
-		Name:   name,
-		Chart:  chart,
-		Values: config,
-	}
+func updateRelease(ctx context.Context,
+	kubeClient *kube.Client,
+	storageBackend *storage.Storage,
+	deployedRelease *rpb.Release,
+	pendingRelease *rpb.Release,
+	pendingObjects map[string]runtime.Object) (*rpb.Release, error) {
+	// track all the updated objects
+	var updated []unstructured.Unstructured
 
-	releaseResponse, err := tiller.UpdateRelease(ctx, updateReq)
+	// TODO: here we may wish to allow the controller to sort or prune the objects
+	// so it can handle dependencies or other such special cases
+	dynamicClient, err := kubeClient.DynamicClient()
 	if err != nil {
-		// Workaround for helm/helm#3338
-		if releaseResponse.GetRelease() != nil {
-			rollbackReq := &services.RollbackReleaseRequest{
-				Name:  name,
-				Force: true,
-			}
-			_, rollbackErr := tiller.RollbackRelease(ctx, rollbackReq)
-			if rollbackErr != nil {
-				return nil, fmt.Errorf("failed to roll back failed update: %s: %s", rollbackErr, err)
-			}
-		}
 		return nil, err
 	}
-	return releaseResponse.GetRelease(), nil
+
+	clientset, err := kubeClient.KubernetesClientSet()
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO this shouldn't change too often so maybe it's ok to cache this
+	groupResources, err := restmapper.GetAPIGroupResources(clientset.Discovery())
+	if err != nil {
+		return nil, err
+	}
+
+	rm := restmapper.NewDiscoveryRESTMapper(groupResources)
+
+	// get the deployed objects from last release
+	deployedObjects, err := getReleaseObjects(deployedRelease)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render deployed release: %s", err)
+	}
+
+	for k, v := range deployedObjects {
+		gvk := v.GetObjectKind().GroupVersionKind()
+		gk := schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}
+		mapping, err := rm.RESTMapping(gk, gvk.Version)
+		pendingObj := pendingObjects[k]
+		objectNameArr := strings.Split(k, "/")
+
+		if pendingObj == nil {
+			// not in the pending release, object was deleted
+			err = dynamicClient.Resource(mapping.Resource).Namespace(deployedRelease.GetNamespace()).Delete(objectNameArr[1], &metav1.DeleteOptions{})
+			if err != nil {
+				return nil, fmt.Errorf("failed to deleted resource: %s", err)
+			}
+
+			log.Info("Deleted resource", "namespace", deployedRelease.GetNamespace(), "gvk", gvk, "release", deployedRelease.GetName(), "name", objectNameArr[1])
+			continue
+		}
+
+		// convert the runtime.Object to unstructured.Unstructured
+		oMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(v)
+		if err != nil {
+			return nil, err
+		}
+
+		unstructuredObj := &unstructured.Unstructured{
+			Object: oMap,
+		}
+
+		// compare the two objects, if the objects aren't equal, update it
+		if !reflect.DeepEqual(pendingObj, v) {
+			_, err = dynamicClient.Resource(mapping.Resource).Namespace(deployedRelease.GetNamespace()).Update(unstructuredObj, metav1.UpdateOptions{})
+			if err != nil {
+				return nil, fmt.Errorf("failed to update resource: %s", err)
+			}
+
+			// add this object to the release
+			updated = append(updated, *unstructuredObj)
+
+			continue
+		}
+
+		// this object didn't change, but is still part of our release
+		updated = append(updated, *unstructuredObj)
+	}
+
+	// check for new objects
+	for k, v := range pendingObjects {
+		if deployedObjects[k] != nil {
+			// existing objects were handled in the above loop
+			continue
+		}
+
+		// at this point, the object is new in this release and must be created
+
+		gvk := v.GetObjectKind().GroupVersionKind()
+		gk := schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind}
+		mapping, err := rm.RESTMapping(gk, gvk.Version)
+
+		oMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(v)
+		if err != nil {
+			return nil, err
+		}
+
+		unstructuredObj := &unstructured.Unstructured{
+			Object: oMap,
+		}
+
+		// new object
+		_, err = dynamicClient.Resource(mapping.Resource).Namespace(deployedRelease.GetNamespace()).Create(unstructuredObj, metav1.CreateOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create resource: %s", err)
+		}
+
+		updated = append(updated, *unstructuredObj)
+	}
+
+	releaseVersion := deployedRelease.GetVersion() + 1
+	pendingRelease.Version = releaseVersion
+
+	// set the release as deployed
+	pendingRelease.Info.Status.Code = rpb.Status_DEPLOYED
+	// take the installed objects and write them to the release
+	pendingRelease.Manifest, err = toManifest(updated)
+	if err != nil {
+		return nil, err
+	}
+
+	err = storageBackend.Create(pendingRelease)
+	if err != nil {
+		log.Error(err, "Error writing release to storage backend", "namespace", pendingRelease.GetNamespace(), "name", pendingRelease.GetName())
+		return nil, err
+	}
+
+	// set the old release to superseded
+	deployedRelease.Info.Status.Code = rpb.Status_SUPERSEDED
+	err = storageBackend.Update(deployedRelease)
+	if err != nil {
+		log.Error(err, "Error updating release to storage backend", "namespace", deployedRelease.GetNamespace(), "name", deployedRelease.GetName())
+		return nil, err
+	}
+
+	return pendingRelease, nil
 }
 
 // ReconcileRelease creates or patches resources as necessary to match the
@@ -416,4 +697,45 @@ func uninstallRelease(ctx context.Context, storageBackend *storage.Storage, till
 		Purge: true,
 	})
 	return uninstallResponse.GetRelease(), err
+}
+
+func getReleaseObjects(release *rpb.Release) (map[string]runtime.Object, error) {
+	objMap := make(map[string]runtime.Object)
+
+	yamls, err := yamlutil.SplitYaml(release.Manifest)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, y := range yamls {
+		// parse the manifest into individual objects
+		decode := scheme.Codecs.UniversalDeserializer().Decode
+		obj, _, err := decode([]byte(y), nil, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		// convert the runtime.Object to unstructured.Unstructured
+		oMap, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+		if err != nil {
+			return nil, err
+		}
+
+		unstructuredObj := &unstructured.Unstructured{
+			Object: oMap,
+		}
+
+		mapKey := unstructuredObj.GetKind() + "/" + unstructuredObj.GetName()
+		objMap[mapKey] = obj
+	}
+
+	return objMap, nil
+}
+
+func toManifest(objects []unstructured.Unstructured) (string, error) {
+	intfArr := make([]interface{}, len(objects))
+	for i, v := range objects {
+		intfArr[i] = v.Object
+	}
+	return yamlutil.ToYaml(intfArr)
 }

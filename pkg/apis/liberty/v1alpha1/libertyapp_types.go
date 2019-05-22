@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	release "github.com/jkwong888/websphere-liberty-operator/pkg/release"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -12,8 +13,8 @@ type LibertyApp struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   LibertyAppSpec `json:"spec"`
-	Status AppStatus      `json:"status,omitempty"`
+	Spec   LibertyAppSpec    `json:"spec"`
+	Status release.AppStatus `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

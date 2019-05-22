@@ -40,5 +40,5 @@ ${SCRIPT_ROOT}/build/_output/bin/deepcopy-gen \
 echo "Generating zz_generated.deepcopy.go for pkg/apis/liberty/v1alpha1 ..."
 ${SCRIPT_ROOT}/build/_output/bin/deepcopy-gen \
     --go-header-file ${SCRIPT_ROOT}/vendor/k8s.io/code-generator/hack/boilerplate.go.txt \
-    --input-dirs github.com/jkwong888/websphere-liberty-operator/pkg/apis/liberty/v1alpha1 \
+    --input-dirs github.com/jkwong888/websphere-liberty-operator/pkg/apis/liberty/v1alpha1,github.com/jkwong888/websphere-liberty-operator/pkg/release \
     -O zz_generated.deepcopy

@@ -15,7 +15,7 @@ docker run \
 
 # build the docker image
 CHART_VERSION=`cat build/_output/chart/stable/ibm-websphere-liberty/Chart.yaml | grep '^version:' | cut -d: -f2 | sed -e 's/ *//g'`
-IMAGE=harbor.jkwong.cloudns.cx/jkwong/websphere-liberty-operator:${CHART_VERSION}
+IMAGE=harbor.jkwong.cloudns.cx/jkwong-pub/websphere-liberty-operator:${CHART_VERSION}
 
 echo "Build image ${IMAGE} ..."
 docker build -t ${IMAGE} -f build/Dockerfile .

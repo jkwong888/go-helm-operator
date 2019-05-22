@@ -31,9 +31,11 @@ import (
 	"k8s.io/helm/pkg/tiller"
 	"k8s.io/helm/pkg/tiller/environment"
 
-	libertyv1alpha1 "github.com/jkwong888/websphere-liberty-operator/pkg/apis/liberty/v1alpha1"
 	"github.com/operator-framework/operator-sdk/pkg/helm/engine"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
+
+var log = logf.Log.WithName("release")
 
 // ManagerFactory creates Managers that are specific to custom resources. It is
 // used by the HelmOperatorReconciler during resource reconciliation, and it
@@ -69,7 +71,7 @@ func (f managerFactory) newManagerForCR(r *unstructured.Unstructured) Manager {
 		namespace:   r.GetNamespace(),
 
 		spec:   r.Object["spec"],
-		status: libertyv1alpha1.StatusFor(r),
+		status: StatusFor(r),
 	}
 }
 

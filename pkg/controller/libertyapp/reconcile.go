@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v2"
-
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/helm/pkg/kube"
 
 	libertyv1alpha1 "github.com/jkwong888/websphere-liberty-operator/pkg/apis/liberty/v1alpha1"
@@ -21,7 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	cpb "k8s.io/helm/pkg/proto/hapi/chart"
 	rpb "k8s.io/helm/pkg/proto/hapi/release"
 )
 
@@ -74,8 +73,6 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	// TODO: here we're taking advantage of
-
 	o := &unstructured.Unstructured{
 		Object: oMap,
 	}
@@ -93,7 +90,7 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	status := libertyv1alpha1.StatusFor(o)
+	status := release.StatusFor(o)
 	log = log.WithValues("release", manager.ReleaseName())
 
 	deleted := o.GetDeletionTimestamp() != nil
@@ -108,39 +105,23 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 		return reconcile.Result{Requeue: true}, err
 	}
 
-	secretName := instance.Spec.Image.PullSecret
-	clientset, err := r.KubeClient.KubernetesClientSet()
-	if err != nil {
-		log.Error(err, "Failed to get kube client")
-	}
-
-	// TODO: would prefer the liberty chart creates a new service account instead of using "default"
-	// for now we'll patch the "default" service account with the pull secret here
-	if secretName != nil {
-		err = image.AddPullSecretToServiceAccount(clientset, request.Namespace, "default", secretName)
-		if err != nil {
-			log.Error(err, "Failed to patch service account")
-			return reconcile.Result{}, err
-		}
-	}
-
-	status.SetCondition(libertyv1alpha1.AppCondition{
-		Type:   libertyv1alpha1.ConditionInitialized,
-		Status: libertyv1alpha1.StatusTrue,
+	status.SetCondition(release.AppCondition{
+		Type:   release.ConditionInitialized,
+		Status: release.StatusTrue,
 	})
 
 	if err := manager.Sync(context.TODO(), r.transformRelease); err != nil {
 		log.Error(err, "Failed to sync release")
-		status.SetCondition(libertyv1alpha1.AppCondition{
-			Type:    libertyv1alpha1.ConditionIrreconcilable,
-			Status:  libertyv1alpha1.StatusTrue,
-			Reason:  libertyv1alpha1.ReasonReconcileError,
+		status.SetCondition(release.AppCondition{
+			Type:    release.ConditionIrreconcilable,
+			Status:  release.StatusTrue,
+			Reason:  release.ReasonReconcileError,
 			Message: err.Error(),
 		})
 		_ = r.updateResourceStatus(o, status)
 		return reconcile.Result{}, err
 	}
-	status.RemoveCondition(libertyv1alpha1.ConditionIrreconcilable)
+	status.RemoveCondition(release.ConditionIrreconcilable)
 
 	if deleted {
 		if !contains(pendingFinalizers, finalizer) {
@@ -151,16 +132,16 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 		uninstalledRelease, err := manager.UninstallRelease(context.TODO())
 		if err != nil && err != release.ErrNotFound {
 			log.Error(err, "Failed to uninstall release")
-			status.SetCondition(libertyv1alpha1.AppCondition{
-				Type:    libertyv1alpha1.ConditionReleaseFailed,
-				Status:  libertyv1alpha1.StatusTrue,
-				Reason:  libertyv1alpha1.ReasonUninstallError,
+			status.SetCondition(release.AppCondition{
+				Type:    release.ConditionReleaseFailed,
+				Status:  release.StatusTrue,
+				Reason:  release.ReasonUninstallError,
 				Message: err.Error(),
 			})
 			_ = r.updateResourceStatus(o, status)
 			return reconcile.Result{}, err
 		}
-		status.RemoveCondition(libertyv1alpha1.ConditionReleaseFailed)
+		status.RemoveCondition(release.ConditionReleaseFailed)
 
 		if err == release.ErrNotFound {
 			log.Info("Release not found, removing finalizer")
@@ -169,10 +150,10 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 			if log.Enabled() {
 				fmt.Println(diffutil.Diff(uninstalledRelease.GetManifest(), ""))
 			}
-			status.SetCondition(libertyv1alpha1.AppCondition{
-				Type:   libertyv1alpha1.ConditionDeployed,
-				Status: libertyv1alpha1.StatusFalse,
-				Reason: libertyv1alpha1.ReasonUninstallSuccessful,
+			status.SetCondition(release.AppCondition{
+				Type:   release.ConditionDeployed,
+				Status: release.StatusFalse,
+				Reason: release.ReasonUninstallSuccessful,
 			})
 		}
 		if err := r.updateResourceStatus(o, status); err != nil {
@@ -196,17 +177,17 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 		installedRelease, err := manager.InstallRelease(context.TODO())
 		if err != nil {
 			log.Error(err, "Failed to install release")
-			status.SetCondition(libertyv1alpha1.AppCondition{
-				Type:    libertyv1alpha1.ConditionReleaseFailed,
-				Status:  libertyv1alpha1.StatusTrue,
-				Reason:  libertyv1alpha1.ReasonInstallError,
+			status.SetCondition(release.AppCondition{
+				Type:    release.ConditionReleaseFailed,
+				Status:  release.StatusTrue,
+				Reason:  release.ReasonInstallError,
 				Message: err.Error(),
 				Release: installedRelease,
 			})
 			_ = r.updateResourceStatus(o, status)
 			return reconcile.Result{}, err
 		}
-		status.RemoveCondition(libertyv1alpha1.ConditionReleaseFailed)
+		status.RemoveCondition(release.ConditionReleaseFailed)
 
 		if r.releaseHook != nil {
 			if err := r.releaseHook(installedRelease); err != nil {
@@ -221,10 +202,10 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 			fmt.Println(diffutil.Diff("", installedRelease.GetManifest()))
 		}
 		log.V(1).Info("Config values", "values", installedRelease.GetConfig())
-		status.SetCondition(libertyv1alpha1.AppCondition{
-			Type:    libertyv1alpha1.ConditionDeployed,
-			Status:  libertyv1alpha1.StatusTrue,
-			Reason:  libertyv1alpha1.ReasonInstallSuccessful,
+		status.SetCondition(release.AppCondition{
+			Type:    release.ConditionDeployed,
+			Status:  release.StatusTrue,
+			Reason:  release.ReasonInstallSuccessful,
 			Message: installedRelease.GetInfo().GetStatus().GetNotes(),
 			Release: installedRelease,
 		})
@@ -238,17 +219,17 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 		previousRelease, updatedRelease, err := manager.UpdateRelease(context.TODO())
 		if err != nil {
 			log.Error(err, "Failed to update release")
-			status.SetCondition(libertyv1alpha1.AppCondition{
-				Type:    libertyv1alpha1.ConditionReleaseFailed,
-				Status:  libertyv1alpha1.StatusTrue,
-				Reason:  libertyv1alpha1.ReasonUpdateError,
+			status.SetCondition(release.AppCondition{
+				Type:    release.ConditionReleaseFailed,
+				Status:  release.StatusTrue,
+				Reason:  release.ReasonUpdateError,
 				Message: err.Error(),
 				Release: updatedRelease,
 			})
 			_ = r.updateResourceStatus(o, status)
 			return reconcile.Result{}, err
 		}
-		status.RemoveCondition(libertyv1alpha1.ConditionReleaseFailed)
+		status.RemoveCondition(release.ConditionReleaseFailed)
 
 		if r.releaseHook != nil {
 			if err := r.releaseHook(updatedRelease); err != nil {
@@ -262,10 +243,10 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 			fmt.Println(diffutil.Diff(previousRelease.GetManifest(), updatedRelease.GetManifest()))
 		}
 		log.V(1).Info("Config values", "values", updatedRelease.GetConfig())
-		status.SetCondition(libertyv1alpha1.AppCondition{
-			Type:    libertyv1alpha1.ConditionDeployed,
-			Status:  libertyv1alpha1.StatusTrue,
-			Reason:  libertyv1alpha1.ReasonUpdateSuccessful,
+		status.SetCondition(release.AppCondition{
+			Type:    release.ConditionDeployed,
+			Status:  release.StatusTrue,
+			Reason:  release.ReasonUpdateSuccessful,
 			Message: updatedRelease.GetInfo().GetStatus().GetNotes(),
 			Release: updatedRelease,
 		})
@@ -276,16 +257,16 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 	expectedRelease, err := manager.ReconcileRelease(context.TODO())
 	if err != nil {
 		log.Error(err, "Failed to reconcile release")
-		status.SetCondition(libertyv1alpha1.AppCondition{
-			Type:    libertyv1alpha1.ConditionIrreconcilable,
-			Status:  libertyv1alpha1.StatusTrue,
-			Reason:  libertyv1alpha1.ReasonReconcileError,
+		status.SetCondition(release.AppCondition{
+			Type:    release.ConditionIrreconcilable,
+			Status:  release.StatusTrue,
+			Reason:  release.ReasonReconcileError,
 			Message: err.Error(),
 		})
 		_ = r.updateResourceStatus(o, status)
 		return reconcile.Result{}, err
 	}
-	status.RemoveCondition(libertyv1alpha1.ConditionIrreconcilable)
+	status.RemoveCondition(release.ConditionIrreconcilable)
 
 	if r.releaseHook != nil {
 		if err := r.releaseHook(expectedRelease); err != nil {
@@ -300,85 +281,74 @@ func (r *ReconcileLibertyApp) Reconcile(request reconcile.Request) (reconcile.Re
 	return reconcile.Result{RequeueAfter: r.ReconcilePeriod}, err
 }
 
-func (r *ReconcileLibertyApp) transformRelease(namespace string, chart *cpb.Chart, config *cpb.Config) error {
+func (r *ReconcileLibertyApp) transformRelease(objectMap map[string]runtime.Object) (map[string]runtime.Object, error) {
+	toReturn := make(map[string]runtime.Object)
+
 	clientset, err := r.KubeClient.KubernetesClientSet()
 	if err != nil {
-		log.Error(err, "Failed to get kube client")
+		log.Error(err, "Failed to get kubernetes clientset")
 	}
 
-	defaultMap := make(map[string]interface{})
-	err = yaml.Unmarshal([]byte(chart.Values.Raw), &defaultMap)
-	if err != nil {
-		log.Error(err, "Failed to unmarshal raw values")
+	for k, v := range objectMap {
+		// find the Deployment
+		if !strings.HasPrefix(k, "Deployment") {
+			toReturn[k] = v
+			continue
+		}
+
+		// convert the runtime.Object to unstructured.Unstructured
+		unstructuredObj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(v)
+		if err != nil {
+			return nil, err
+		}
+
+		// convert to Deployment
+		deployment := &appsv1.Deployment{}
+		err = runtime.DefaultUnstructuredConverter.FromUnstructured(unstructuredObj, deployment)
+		if err != nil {
+			return nil, err
+		}
+
+		namespace := deployment.ObjectMeta.GetNamespace()
+
+		// find the images
+		containers := deployment.Spec.Template.Spec.Containers
+		var newContainers []corev1.Container
+		for _, container := range containers {
+			newContainer := container.DeepCopy()
+			// get the image repo and tag
+			img, err := image.NewLibertyAppImage(clientset, container.Image, namespace, nil)
+			if err != nil {
+				return nil, err
+			}
+
+			digest, err := img.GetDigest(context.TODO())
+			if err != nil {
+				return nil, err
+			}
+
+			// this is a small hack to get the image to be split the way we like, so the new
+			// repository is repo@sha256 and the tag is abcdefg123456
+			imageRepo := strings.Split(container.Image, ":")
+
+			// to grab an image by digest from the image repository, use the repo@sha256:abcdefg123456
+			newImageName := fmt.Sprintf("%s@%s", imageRepo[0], *digest)
+			newContainer.Image = newImageName
+			newContainers = append(newContainers, *newContainer)
+		}
+
+		deployment.Spec.Template.Spec.Containers = newContainers
+		toReturn[k] = deployment.DeepCopyObject()
 	}
 
-	defaultImageSpec := defaultMap["image"].(map[interface{}]interface{})
-	imageRepo := defaultImageSpec["repository"]
-	imageTag := defaultImageSpec["tag"]
-	var secretName *string
-
-	/* parse config.Raw to get the overridden image repo and tag */
-	valueMap := make(map[interface{}]interface{})
-	err = yaml.Unmarshal([]byte(config.Raw), &valueMap)
-	if err != nil {
-		log.Error(err, "Failed to unmarshal raw values")
-	}
-
-	imageSpec := valueMap["image"].(map[interface{}]interface{})
-	if imageSpec != nil {
-		imageRepo = imageSpec["repository"]
-		imageTag = imageSpec["tag"]
-		secretNameTmp := imageSpec["pullSecret"].(string)
-		secretName = &secretNameTmp
-	}
-
-	imageName := fmt.Sprintf("%s:%s", imageRepo, imageTag)
-
-	img, err := image.NewLibertyAppImage(clientset, imageName, namespace, secretName)
-	if err != nil {
-		log.Error(err, "Failed to get image", "image", imageName)
-	}
-
-	// get the image digest, which may look like sha256:abcdefg12356....
-	digest, err := img.GetDigest(context.TODO())
-	if err != nil {
-		log.Error(err, "Failed to get image digest", "image", imageName)
-	}
-
-	// to grab an image by digest from the image repository, use the repo@sha256:abcdefg123456
-	newImageName := fmt.Sprintf("%s@%s", imageRepo, *digest)
-
-	// this is a small hack to get the image to be split the way we like, so the new
-	// repository is repo@sha256 and the tag is abcdefg123456
-	newImgSplit := strings.Split(newImageName, ":")
-
-	if imageSpec == nil {
-		imageSpec = make(map[interface{}]interface{})
-	}
-
-	imageSpec["repository"] = newImgSplit[0]
-	imageSpec["tag"] = newImgSplit[1]
-	valueMap["image"] = imageSpec
-
-	out, err := yaml.Marshal(valueMap)
-	if err != nil {
-		log.Error(err, "Failed to Marshal updated values")
-	}
-
-	config.Raw = string(out)
-
-	log.V(1).Info("Updating chart parameters with liberty image digest",
-		"LibertyAppImage", imageName,
-		"Digest", digest)
-
-	return nil
+	return toReturn, nil
 }
 
 func (r ReconcileLibertyApp) updateResource(o *unstructured.Unstructured) error {
 	return r.Client.Update(context.TODO(), o)
 }
 
-func (r ReconcileLibertyApp) updateResourceStatus(o *unstructured.Unstructured, status *libertyv1alpha1.AppStatus) error {
+func (r ReconcileLibertyApp) updateResourceStatus(o *unstructured.Unstructured, status *release.AppStatus) error {
 	o.Object["status"] = status
 	return r.Client.Status().Update(context.TODO(), o)
 }

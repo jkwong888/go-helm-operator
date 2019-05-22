@@ -38,6 +38,9 @@ spec:
     pullSecret: "my-pull-secret"
   ssl:
     enabled: false 
+  service:
+    port: 9080
+    targetPort: 9080
 ```
 
 # TODO

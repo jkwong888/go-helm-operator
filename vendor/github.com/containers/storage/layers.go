@@ -402,11 +402,9 @@ func (r *layerStore) Save() error {
 	if err != nil {
 		return err
 	}
+	defer r.Touch()
 	if err := ioutils.AtomicWriteFile(rpath, jldata, 0600); err != nil {
 		return err
-	}
-	if !r.IsReadWrite() {
-		return nil
 	}
 	r.mountsLockfile.Lock()
 	defer r.mountsLockfile.Unlock()
@@ -614,6 +612,7 @@ func (r *layerStore) Put(id string, parentLayer *Layer, names []string, mountLab
 	opts := drivers.CreateOpts{
 		MountLabel: mountLabel,
 		StorageOpt: options,
+		IDMappings: idMappings,
 	}
 	if moreOptions.TemplateLayer != "" {
 		if err = r.driver.CreateFromTemplate(id, moreOptions.TemplateLayer, templateIDMappings, parent, parentMappings, &opts, writeable); err != nil {

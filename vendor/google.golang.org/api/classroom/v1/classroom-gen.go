@@ -415,9 +415,9 @@ type Announcement struct {
 	// IndividualStudentsOptions: Identifiers of students with access to the
 	// announcement.
 	// This field is set only if `assigneeMode` is `INDIVIDUAL_STUDENTS`.
-	// If the `assigneeMode` is `INDIVIDUAL_STUDENTS`, then only students
-	// specified in this
-	// field will be able to see the announcement.
+	// If the `assigneeMode` is `INDIVIDUAL_STUDENTS`, then only
+	// students
+	// specified in this field will be able to see the announcement.
 	IndividualStudentsOptions *IndividualStudentsOptions `json:"individualStudentsOptions,omitempty"`
 
 	// Materials: Additional materials.
@@ -794,7 +794,8 @@ type Course struct {
 	// all teachers of the
 	// course.
 	//
-	// This field will only be set for teachers of the course and domain
+	// This field will only be set for teachers of the course and
+	// domain
 	// administrators.
 	//
 	// Read-only.
@@ -6875,6 +6876,7 @@ func (r *CoursesCourseWorkService) Patch(courseId string, id string, coursework 
 // * `max_points`
 // * `scheduled_time`
 // * `submission_modification_mode`
+// * `topic_id`
 func (c *CoursesCourseWorkPatchCall) UpdateMask(updateMask string) *CoursesCourseWorkPatchCall {
 	c.urlParams_.Set("updateMask", updateMask)
 	return c
@@ -6993,7 +6995,7 @@ func (c *CoursesCourseWorkPatchCall) Do(opts ...googleapi.CallOption) (*CourseWo
 	//       "type": "string"
 	//     },
 	//     "updateMask": {
-	//       "description": "Mask that identifies which fields on the course work to update.\nThis field is required to do an update. The update fails if invalid\nfields are specified. If a field supports empty values, it can be cleared\nby specifying it in the update mask and not in the CourseWork object. If a\nfield that does not support empty values is included in the update mask and\nnot set in the CourseWork object, an `INVALID_ARGUMENT` error will be\nreturned.\n\nThe following fields may be specified by teachers:\n\n* `title`\n* `description`\n* `state`\n* `due_date`\n* `due_time`\n* `max_points`\n* `scheduled_time`\n* `submission_modification_mode`",
+	//       "description": "Mask that identifies which fields on the course work to update.\nThis field is required to do an update. The update fails if invalid\nfields are specified. If a field supports empty values, it can be cleared\nby specifying it in the update mask and not in the CourseWork object. If a\nfield that does not support empty values is included in the update mask and\nnot set in the CourseWork object, an `INVALID_ARGUMENT` error will be\nreturned.\n\nThe following fields may be specified by teachers:\n\n* `title`\n* `description`\n* `state`\n* `due_date`\n* `due_time`\n* `max_points`\n* `scheduled_time`\n* `submission_modification_mode`\n* `topic_id`",
 	//       "format": "google-fieldmask",
 	//       "location": "query",
 	//       "type": "string"
