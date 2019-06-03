@@ -1,8 +1,10 @@
-# helm-operator-liberty
+# go-helm-operator
 
-Operator for Websphere Liberty apps in Kubernetes, using the operator-sdk, generated from helm chart
+Build a Go Operator from a helm chart.  In this example I used Websphere Liberty chart, using the operator-sdk
 
 # Operator functions
+
+Our example operator:
 
 - deploy the [ibm-websphere-liberty helm chart](https://github.com/IBM/charts/tree/master/stable/ibm-websphere-liberty) when `LibertyApp` CR is created
   - The CR `spec` field contains `values.yaml` properties that can be specified as if installing the helm chart
