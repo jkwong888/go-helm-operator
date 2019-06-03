@@ -27,11 +27,12 @@ We used the [Operator SDK](https://github.com/operator-framework/operator-sdk) t
 
 ```
 
-The `operator-sdk` will generate an `interface{}` struct called `LibertyAppSpec`.  There are various scripts in `hack` directory to generate code for this out of `values.yaml`, which builds the necessary nested structs in order to build go code that can reconcile the CR.
+The `operator-sdk` will generate an `interface{}` field in the CR called `LibertyAppSpec`.  There are various scripts in `hack` directory to generate code for this out of `values.yaml`, which builds the necessary nested structs in order to build go code that can reconcile the CR.
 
 - `hack/libertyappspec_gen.sh` will generate go structs from the liberty chart's `values.yaml`
   - Specifically in our operator, `image.pullSecret` is not originally part of the chart and I added this by hand, so the resulting `pkg/apis/liberty/v1alpha1/libertyappspec.go` was hand modified to include this field after this step
 - `hack/deepcopy_gen.sh` will generate deep copy functions for the go structs
+  - this is equivalent to calling `operator-sdk generate-k8s`.
 - `hack/gen_from_liberty_chart.sh` wraps the above functions; it downloads the latest liberty chart, calls `hack/libertyappspec_gen.sh` to generate go structs, and uses `hack/deepcopy_gen.sh` to generate the deep copy functions needed for the operator sdk
 - `hack/run_local.sh` will use build the operator and run it (assuming you've unzipped the chart in `/opt/helm/charts`) reusing the current kube context
 - `hack/deploy_operator.sh` will use a golang container to build and deploy the operator, roles, and CRDs using the current kube context
